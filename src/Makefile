@@ -32,6 +32,7 @@ CXX    = g++
 SRC ?= ./src
 INC =
 # INC += -I/usr/local/cuda/include
+INC += -I/usr/include
 
 LDFLAGS =
 ERRFLAGS =
@@ -39,15 +40,17 @@ FEAFLAGS =
 FEAFLAGS += -D_GIT_KEY=$(GITKEY) 
 # ERRFLAGS = -Werror -Wall -Wfatal-errors
 # FEAFLAGS += -fopenmp -pthread
-# FEAFLAGS += -fopenmp
+FEAFLAGS += -fopenmp
 # FEAFLAGS += -fno-omit-frame-pointer
 # FEAFLAGS += -D NO_UNIT_TESTS ## for production
+
+LDFLAGS += -lglut -lGL -lGLU
 
 ## include also code which is not meant for release,
 ## use github.com/BR903/cppp -UDEVEL to do partial preprocessing
 FEAFLAGS += -D DEVEL 
 FEAFLAGS += -D HAS_WINDOW -D GL_SILENCE_DEPRECATION
-LDFLAGS += -framework GLUT -framework OpenGL
+# LDFLAGS += -framework GLUT -framework OpenGL
 
 # normal mode
 # OPTFLAGS = -Ofast

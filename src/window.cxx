@@ -17,13 +17,16 @@
 #ifdef HAS_WINDOW
 // c++ -std=c++11 ... -framework GLUT -framework OpenGL -D GL_SILENCE_DEPRECATION
 
-  #define __MacOSX__
+  // #define __MacOSX__
   #ifdef  __MacOSX__
     #include <OpenGL/gl.h>
     #include <OpenGL/glu.h>
     #include <OpenGL/glext.h>
     #include <GLUT/glut.h>
   #else  // __MacOSX__
+    #include <GL/gl.h>
+    #include <GL/glu.h>
+    #include <GL/glext.h>
     #include <GL/glut.h>
   #endif // __MacOSX__
 
