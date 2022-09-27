@@ -15,7 +15,7 @@
 #include "warnings.hxx" // warn
 
 namespace icogrid {
-  
+
   double constexpr Degrees72 = 2*M_PI/5.; // angle between two pentagon points
 
   inline constexpr
@@ -31,8 +31,8 @@ namespace icogrid {
   inline constexpr
   size_t pole_ico_index(unsigned const Level, char const sn) { // NorthPole: pole_ico_index(L,'N');
       return  ico_index(Level, 10, 0, ('s' == (sn | 32))); }   // SouthPole: pole_ico_index(L,'S');
-  
-  
+
+
   inline size_t ico_index_wrap(unsigned const Level, unsigned const i10, unsigned const iSE, unsigned const iNE) {
       // std::printf("# ico_index_wrap(Level=%d, i10=%d, iSE=%d, iNE=%d)\n", Level, i10, iSE, iNE);
       int const tL = rhomb_edge(Level);
@@ -102,7 +102,7 @@ namespace icogrid {
       axb[1] = a[2] * b[0] - a[0] * b[2];
       axb[2] = a[0] * b[1] - a[1] * b[0];
   } // crossProduct
-  
+
 //   inline int log2(size_t x) { int l2{-1}; while (x) { ++l2; x >>= 1; } return l2; } 
 
   template <typename real_t> inline
@@ -112,7 +112,7 @@ namespace icogrid {
       double const deg36 = M_PI/5.; // 36 degrees
       printf("# latitude = %.1f longitude = %.1f degrees\n", lat*degrees, lon*degrees);
       double const l10 = lon/deg36;
-      
+
       double const pos[3] = {std::cos(lon)*std::cos(lat), std::sin(lon)*std::cos(lat), std::sin(lat)};
       int j10{-1};
       if (std::abs(lat) > critical_latitude) {
@@ -149,7 +149,7 @@ namespace icogrid {
               } // jNE
               if (echo > 7) printf("# %i-th minimize found iNE=%i, distance^2= %g\n", iter, iNE, d2min);
           }
-          
+
           // minimize in iSE
           {
               double d2min{9e9};
@@ -160,13 +160,13 @@ namespace icogrid {
               } // jSE
               if (echo > 7) printf("# %i-th minimize found iSE=%i, distance^2= %g\n", iter, iSE, d2min);
           }
-          
+
       } // iter
 
       return 0;
   } // find_rhomb
 
-  
+
 
   inline int32_t global_coordinates(unsigned Level, unsigned i10, unsigned iSE, unsigned iNE) {
       assert(Level < 15); // 10*4^15 > 2^32
@@ -208,7 +208,7 @@ namespace icogrid {
       double const lat = std::asin(v[2]), lon = std::atan2(v[1], v[0]);
       return find_rhomb(lat, lon, vtx);
   } // find_rhomb
-  
+
 
   template <typename real_t>
   status_t inline generate(view4D<real_t> & vtx, unsigned const Level, int const echo=0) {
@@ -237,7 +237,7 @@ namespace icogrid {
           assert(2 == vtx.dim1());
           assert(2 == vtx.dim2());
           int const iNP = pole_ico_index(0, 'N');
-          int const iSP = pole_ico_index(0, 'S');          
+          int const iSP = pole_ico_index(0, 'S');
           for (int i5 = 0; i5 < 5; ++i5) {
               {   // Northern rhomb (even)
                   unsigned const i10 = 2*i5 + 0;
@@ -257,8 +257,8 @@ namespace icogrid {
 
           return 0;
       } // 0 == Level
-      
-      
+
+
       size_t const tL = rhomb_edge(Level - 1);
       view4D<real_t> vtx_prev(10, tL + 1, tL + 1, 3);
       // recursive invokation
@@ -283,7 +283,7 @@ namespace icogrid {
           //=================================================================================
 
           real_t const one = 1;
-          
+
           // create points (odd iNE, even iSE) from (iNE-1, iSE) and (iNE+1, iSE)
           for (int iSE = 0; iSE <= 2*tL; iSE += 2) { // south east direction
               for (int iNE = 1; iNE <= 2*tL; iNE += 2) { // north east direction
@@ -340,11 +340,11 @@ namespace icogrid {
                       longest2  = std::max(longest2,  norm2(dv));
                       shortest2 = std::min(shortest2, norm2(dv));
                   }
-                  
+
               } // iNE
           } // iSE
-          
-          
+
+
       } // i10
       if (nerrors) printf("# %s Level=%i found %ld errors!\n", __func__, Level, nerrors);
       // else printf("# %s Level=%i found no errors!\n", __func__, Level); // DEBUG
@@ -352,7 +352,7 @@ namespace icogrid {
       double const Radius = control::get("earth.radius", 6.3781e6); // radius of the Earth in meters
       auto const SegmentDistance = Radius/std::sin(Degrees72); // space distance between two pentagon centers
       if (echo > 10) {
-          
+
           // show some characteristic number of this grid level
           size_t const nTriangles = 20 * (1ull << (2*Level)); // 20*4^L
           size_t const nEdges     = 12 * (1ull << (2*Level)); // 12*4^L // not sure
@@ -380,7 +380,7 @@ namespace icogrid {
           printf("#\n\n");
       } // echo
 
-      
+
       auto const svg_filename = control::get("icogrid.export.svg.file", "");
       if (svg_filename && *svg_filename) {
           auto const svgf = std::fopen(svg_filename, "w");
@@ -420,20 +420,20 @@ namespace icogrid {
               } // black lines
 
               { // draw the inner triangles (mesh lines)
-              
+
                   for (int iSE = 0; iSE < 2*tL; ++iSE) { // south east direction
                       for (int iNE = 0; iNE < 2*tL; ++iNE) { // north east direction
                           for (int ft = 0; ft < 2; ++ft) {
-                              
+
                           } // ft
                       } // iNE
                   } // iSE
 
               } // grey lines
-              
+
           } // i10
-          
-          
+
+
 
           std::fprintf(svgf, "</svg>\n");
           stat += std::fclose(svgf);
@@ -445,7 +445,7 @@ namespace icogrid {
   status_t inline test_triangle(int const echo=1, unsigned const Level=3) {
       // find the symmetry multiplicity of equivalent points in a Level-subdivided triangle
       // exploiting 3-fold rotation about the center and 2-fold mirror planes
-      
+
       int const edge = rhomb_edge(Level);
 
       view2D<int8_t> level(edge + 1, edge + 1, -1); // init levels as impossible
@@ -490,9 +490,9 @@ namespace icogrid {
       // rotation (4, 2) --> (2, 0)
       // rotation (4, 3) --> (3, 0)
       // rotation (4, 4) --> (4, 0)
-      
+
       // implemented as (i,j) --> (e+j-i,e-i)
-      
+
       // base vectors: (1,0) for i and (-.5, s34) for j
       // rotate by 120 degrees == 2*pi/3
       // using
@@ -502,7 +502,7 @@ namespace icogrid {
       // the center is the center of mass between the 3 vertex points
       // 00, e0 and ee, i.e. 2e/3*(1,0) + e/3*(-.5, s34)
       // == e*(.5, s34/3)
-      
+
 #ifdef GEOMETRIC
       double const s34 = std::sqrt(0.75), s13 = std::sqrt(1./3.);
       double const center[2] = {0.5*edge, 0.5*s13*edge};
@@ -620,7 +620,7 @@ namespace icogrid {
               { auto & m = multi(i0M,j0M); auto const mc{m}; m -= mc; mr += mc; }
               { auto & m = multi(i1M,j1M); auto const mc{m}; m -= mc; mr += mc; }
               { auto & m = multi(i2M,j2M); auto const mc{m}; m -= mc; mr += mc; }
-              
+
           } // j
       } // i
 
@@ -643,8 +643,8 @@ namespace icogrid {
       // mirror (4, 2) --> (2, 2)
       // mirror (4, 3) --> (3, 3)
       // mirror (4, 4) --> (4, 4)
-      
-      
+
+
       // now generate all 2*3 operations as products
 
       std::vector<uint32_t> hm60(Level + 1, 0);
@@ -656,7 +656,7 @@ namespace icogrid {
           } // j
       } // i
 
-      
+
       if (0) { // scope: eval
           if (echo > 0) printf("\n# %s: Histogramm of multiplicity 60 levels: (up to Level %d):\n", __func__, Level);
           for(size_t m = 0; m < hm60.size(); ++m) {
@@ -682,13 +682,10 @@ namespace icogrid {
           if (echo > 0) printf("# %s: L, m120, m60, n    %d %d %d %ld\n", __func__, Level, hist[120], hist[60], reference);
       } // scope
 
-      
-      
-
       return 0;
   } // test_triangle
-  
-  
+
+
   status_t inline test_base_point_distances(int const echo=0) {
       auto const SegmentDistance = 1./std::sin(Degrees72);
       if (echo > 7) printf("# %s: segment distance %.9f\n", __func__, SegmentDistance);
@@ -728,5 +725,5 @@ namespace icogrid {
       stat += test_triangle(echo, Level);
       return stat;
   } // all_tests
-  
+
 } // namespace icogrid

@@ -32,9 +32,10 @@ namespace impera {
       for (int ih = 0; ih < height; ++ih) {
           std::printf("~~~~");
           for (int iw = 0; iw < width; ++iw) {
-              float const red   = pop_map(ih, iw, 2);
-              float const green = pop_map(ih, iw, 1);
-              float const blue  = pop_map(ih, iw, 0);
+              auto const rgb = pop_map(ih, iw);
+              auto const red   = rgb[2];
+              auto const green = rgb[1];
+              auto const blue  = rgb[0];
               std::printf("%s ", color::colorchar(red, green, blue).c_str());
           } // iw
           std::printf("%s~~~~\n", color::def);
@@ -43,6 +44,7 @@ namespace impera {
   } // display_in_terminal
 
   status_t read_resource_file(std::vector<GridCell_t> & resources, char const *filename, int const echo) {
+      if (nullptr == filename) filename = "resources.dat";
       std::ifstream infile(filename, std::ifstream::in);
       if (infile.fail()) {
           warn("Unable to open file '%s' for reading resources", filename);
@@ -91,7 +93,9 @@ namespace impera {
                           } // valid index
                       } // i6
                       cell.n_neighbors = nn;
-                      ++nnhist[nn]; ++nnhist[nn_ALL];
+                      assert(nn < nn_ALL);
+                      ++nnhist[nn];
+                      ++nnhist[nn_ALL];
 
                       ++nr; // a cell has been successfully initialized
                   } else {

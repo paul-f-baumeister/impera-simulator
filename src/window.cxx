@@ -423,9 +423,9 @@ namespace window {
           glEnd();                        // End of drawing a point
           // point is drawn but the coordinate transformation seem unclear
       } // draw a point when clicked
-      
+
       glutSwapBuffers(); // Swap the front and back frame buffers (double buffering)
-    
+
   } // display
 
 
@@ -491,8 +491,9 @@ namespace window {
       char infilename[96];
       std::snprintf(infilename, 95, "%s/%s%i%s", ResourceFilePath, ResourceFileBaseName, Level, ResourceFileExtension);
       if (echo > 0) std::printf("# read resource map from '%s'\n", infilename);
-      std::vector<GridCell_t> resources;
-      stat += impera::read_resource_file(resources, infilename, echo);
+//       std::vector<GridCell_t> resources;
+//       stat += impera::read_resource_file(resources, infilename, echo);
+      auto const resources = impera::read_resource_file(infilename, echo);
 //       int const nr = std::min(, colors.dim1());
 //       float max_resources{0};
 //       for (int ir = 0; ir < nr; ++ir) {
@@ -518,7 +519,7 @@ namespace window {
       glutMainLoop();
       if (echo > 0) std::printf("# run done\n");
   } // run
-  
+
   status_t init(int argc, char *argv[]) {
       glutInit(&argc, argv);
       glutInitDisplayMode(GLUT_DOUBLE); // enable double buffered mode
@@ -554,7 +555,7 @@ namespace window {
 
   status_t inline test_world_map(int const echo=1) {
       status_t stat(0);
-      int const Level = control::get("Level", 3.); // icosahedral grid level
+      int const Level = control::get("Level", 5.); // icosahedral grid level
       stat += create_wireframe(Level, echo);
       stat += get_resource_map(Level, echo);
       stat += init(0, nullptr);

@@ -38,15 +38,15 @@ namespace main_tools {
           if (all || (0 == module_name.compare(#NAME))) { \
               results.push_back(std::make_pair(#NAME, show?0: NAME::all_tests(echo))); \
           }
-          add_module_test(color);
-          add_module_test(bitmap);
+          add_module_test(warnings);
+          add_module_test(control);
+          add_module_test(data_view);
           add_module_test(icomap);
           add_module_test(icogrid);
-          add_module_test(warnings);
-          add_module_test(data_view);
-          add_module_test(control);
-          add_module_test(window);
+          add_module_test(bitmap);
+          add_module_test(color);
           add_module_test(impera);
+          add_module_test(window);
 #undef    add_module_test
       } // testing scope
 
@@ -82,20 +82,22 @@ namespace main_tools {
       return 0;
   } // show_help
 
-  int show_version(char const *executable="#") {
+  int show_version(char const *executable="#", int const echo=0) {
 #ifdef _GIT_KEY
       // stringify the value of a macro, two expansion levels needed
       #define macro2string(a) stringify(a)
       #define stringify(b) #b
-      printf("%s git checkout " macro2string(_GIT_KEY) "\n\n", executable);
+      auto const git_key = macro2string(_GIT_KEY);
       #undef  stringify
       #undef  macro2string
-#endif
+      control::set("git.key", git_key); // store in the global variable environment
+      if (echo > 0) std::printf("# %s git checkout %s\n\n", executable, git_key);
+#endif // _GIT_KEY
       return 0;
   } // show_version
 
 } // namespace main_tools
-  
+
 int main(int const argc, char const *argv[]) {
     status_t stat(0);
     char const *test_unit = nullptr; // the name of the unit to be tested
@@ -121,7 +123,7 @@ int main(int const argc, char const *argv[]) {
                     return main_tools::show_help(argv[0]);
                 } else 
                 if ("version" == option) {
-                    return main_tools::show_version(argv[0]);
+                    return main_tools::show_version(argv[0], 1);
                 } else 
                 if ("verbose" == option) {
                     verbosity = 6; // set high
@@ -165,10 +167,16 @@ int main(int const argc, char const *argv[]) {
             printf(" %s", argv[iarg]); // repeat the command line arguments
         }   printf("\n");
     } // echo
-    if (echo > 0) main_tools::show_version();
+    if (echo > 0) main_tools::show_version(argv[0], 0); // silent to put the git key into the variable environment
     if (echo > 0) printf("\n# verbosity = %d\n", echo);
+
     if (run_tests) stat += main_tools::run_unit_tests(test_unit, echo);
+
+    int const control_show = control::get("control.show", 1.); // 0:show none, 1:show used, 2:show unused, 4:show defaults, 6:show all
+    if (control_show && echo > 0) control::show_variables(control_show);
+
     if (echo > 0) warnings::show_warnings(3);
     warnings::clear_warnings(1);
+
     return int(stat);
 } // main
