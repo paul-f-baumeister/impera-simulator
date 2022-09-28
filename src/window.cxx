@@ -1,5 +1,6 @@
 #include <cstdio> // std::printf
 #include <cassert> // assert
+#include <cstdlib> // std::exit
 #include <algorithm> // std::min
 #include <cmath> // M_PI
 
@@ -48,7 +49,11 @@ namespace window {
   static view4D<float> vertex;  // vertices of the wireframe model of the icosahedral sphere grid
   static view3D<float> colors;  // actual colors of the triangles (view3D instead of view2D to query dim1)
 
-  static int initialized = 0;
+  static bool initialized = false;
+  static bool confirmquit = false;
+  static bool simulation_is_running = false;
+  static int simulation_speed = 1; // days per call to run_some_days
+  int constexpr MaxSpeed = 512;
   static int echo = 0;
   static int16_t itheta_now = 9, iphi_now = 9; // range of int16_t is [-32768, 32767]
   constexpr float zoom_max = 9;
@@ -136,10 +141,12 @@ namespace window {
 
       itheta_now = itheta; iphi_now = iphi; // set global variables
 
-      if (echo) std::printf("# %s (theta, phi) = (%c %.3f, %c %.3f) degrees, (%d, %d)/2^16 and (%9.6f, %9.6f) rad\n",
+      if (echo > 13) {
+          std::printf("# %s (theta, phi) = (%c %.3f, %c %.3f) degrees, (%d, %d)/2^16 and (%9.6f, %9.6f) rad\n",
                           __func__, (itheta_now < 0)?'S':'N', std::abs(itheta_now)*i162deg, 
                                     (iphi_now   < 0)?'W':'E', std::abs(iphi_now  )*i162deg,
                                     itheta_now, iphi_now, itheta_now*i162rad, iphi_now*i162rad);
+      } // echo
       return true;
   } // rotate
 
@@ -150,16 +157,23 @@ namespace window {
       auto const old_zoom = zoom;
       zoom = std::min(std::max(0.f, new_zoom), zoom_max);
       bool const changed = (old_zoom != zoom);
-      if (echo) std::printf("# %s%s from %.3f (%.6f) to %.3f (%.6f)\n", changed?"":"cannot ",__func__,
-          zoom_distance(old_zoom), old_zoom, zoom_distance(zoom), zoom);
-//       if (changed) {
-//           GLfloat model[16];
-//           set(model, 16, GLfloat(0));
-//           glGetFloatv(GL_MODELVIEW_MATRIX, model);
-//           std::printf("# GL_MODELVIEW_MATRIX:"); for (int i = 0; i < 16; ++i) std::printf("%s%12.6f", (i&3)?" ":"\n#", model[i]); std::printf("\n");
-//       }
+      if (echo > (changed ? 9 : 5)) {
+          std::printf("# %schange zoom from %.3f (%.6f) to %.3f (%.6f)\n", changed?"":"cannot ",
+                         zoom_distance(old_zoom), old_zoom, zoom_distance(zoom), zoom);
+      } // echo
       return changed;
   } // change_zoom
+
+  void change_speed(bool const faster) {
+      auto const old_speed = simulation_speed;
+      auto const new_speed = faster ? (simulation_speed << 1) : (simulation_speed >> 1);
+      simulation_speed = std::min(std::max(1, new_speed), MaxSpeed);
+      bool const changed = (old_speed != simulation_speed);
+      if (echo > (changed ? 2 : 1)) {
+          std::printf("# %schange speed (days per call) from %d to %d\n", changed?"":"cannot ",
+                        old_speed, changed ? simulation_speed : new_speed);
+      } // echo
+  } // change_speed
 
   int16_t angle_of_zoom(float const z) { return std::pow(2.f, 4 + z); }
 
@@ -201,6 +215,15 @@ namespace window {
       return stat;
   } // create_wireframe
 
+  status_t finalize(int const echo) {
+      if (echo > 0) std::printf("# free dynamic memory in global quantities.\n");
+      vertex0 = view4D<float>();
+      vertex  = view4D<float>();
+      colors  = view3D<float>();
+      if (echo > 0) std::printf("# cleanup memory of simulation instance.\n");
+      simulation = impera::run_some_days(Nspecies, impera::MemoryCleanup, echo);
+      return 0;
+  } // finalize
 
   void where_was_the_click(int const x, int const y, GLfloat xy[2]=nullptr) {
       auto const width  = glutGet(GLUT_WINDOW_WIDTH); // ToDo: move these into global variables that get updated on resize
@@ -212,7 +235,7 @@ namespace window {
           auto const min_wh = std::max(1, std::min(width, height));
           auto const xr = (x -  width*.5)/min_wh;
           auto const yr = (y - height*.5)/min_wh;
-          std::printf("# click at (x=%d, y=%d) --> (%g, %g)\n", x, y, xr, yr);
+          if (echo > 7) std::printf("# click at (x=%d, y=%d) --> (%g, %g)\n", x, y, xr, yr);
       }
       // at distance 3.247 earth radii, the earth circumference is at xr == yr == +/-0.39
       // at distance 2.887 earth radii, the earth circumference is at xr == yr == +/-0.446
@@ -228,7 +251,7 @@ namespace window {
       int const state01  = (GLUT_DOWN == state) ? 0 : ((GLUT_UP == state) ? 1 : 2);
       int const down0up1 = (GLUT_DOWN == state) ? 0 : 1;
       char const state_string[][8] = {"press", "release", "?"};
-      std::printf("# Mouse %s %s at x=%d y=%d\n", botton_string[button012], state_string[state01], x, y);
+      if (echo > 9) std::printf("# Mouse %s %s at x=%d y=%d\n", botton_string[button012], state_string[state01], x, y);
       // beware: x,y can be negative when GLUT_UP == state but not when GLUT_DOWN == state
       if (GLUT_DOWN == state) assert(x >= 0 && y >= 0);
       where_was_the_click(x, y);
@@ -247,16 +270,16 @@ namespace window {
   } // mouse_click
 
   void mouse_motion(int const x, int const y) {
-      // std::printf("# Mouse motion x=%d y=%d\n", x, y); // tons of output when you move the mouse, not only when pressed
+      // if (echo > 99) std::printf("# Mouse motion x=%d y=%d\n", x, y); // tons of output when you move the mouse, not only when pressed
       bool changed{false};
       if (mouse_button_is_down[2]) {
           int const drag_button = 2;
           // free earth rotation mode
           GLfloat xy[2]; where_was_the_click(x, y, xy);
           auto const f = 10*deg2i16;
-          int16_t const itheta_new = click_angles[drag_button][0][0] + f*(click_position[drag_button][0][1] - xy[1]);
-          int16_t const iphi_new   = click_angles[drag_button][0][1] + f*(click_position[drag_button][0][0] - xy[0]);
-          std::printf("# Mouse drag at x=%d y=%d --> new angles (%g, %g)\n", x, y, itheta_new*i162deg, iphi_new*i162deg);
+          auto const itheta_new = click_angles[drag_button][0][0] + f*(click_position[drag_button][0][1] - xy[1]);
+          auto const iphi_new   = click_angles[drag_button][0][1] + f*(click_position[drag_button][0][0] - xy[0]);
+          if (echo > 9) std::printf("# Mouse drag at x=%d y=%d --> new angles (%g, %g)\n", x, y, itheta_new*i162deg, iphi_new*i162deg);
           changed = rotate(itheta_new, iphi_new);
       } else if (mouse_button_is_down[1]) { // middle button
           int const drag_button = 2;
@@ -264,13 +287,16 @@ namespace window {
           GLfloat xy[2]; where_was_the_click(x, y, xy);
           auto const f = 1;
           auto const new_zoom = click_zoom[drag_button][0] + f*(click_position[drag_button][0][1] - xy[1]);
-          std::printf("# Mouse drag at y=%d --> new zoom %g\n", y, new_zoom);
+          if (echo > 9) std::printf("# Mouse drag at y=%d --> new zoom %g\n", y, new_zoom);
           changed = change_zoom(new_zoom);
       }
 
       // else { std::printf("# Mouse move at x=%d y=%d\n", x, y); }
-      if (changed) glutPostRedisplay(); // redraw
-  } // mouse
+      if (changed) {
+          glutPostRedisplay(); // redraw
+      } // changed
+
+  } // mouse_motion
 
   inline bool focus_on(double const theta_degree, double const phi_degree, float const zoom_level=zoom_max) {
       return change_zoom(zoom_level) || rotate(theta_degree*deg2i16, phi_degree*deg2i16);
@@ -279,22 +305,22 @@ namespace window {
   static void key_stroke(int const key, int const x, int const y) {
       // beware: x,y can be negative
       auto const angle = angle_of_zoom(zoom);
-      bool changed{false};
+      bool changed{false}, requestquit{false};
       switch (key) {
-          case GLUT_KEY_F1:
-          case GLUT_KEY_F2:
-          case GLUT_KEY_F3:
-          case GLUT_KEY_F4:
-          case GLUT_KEY_F5:
-          case GLUT_KEY_F6:
-          case GLUT_KEY_F7:
-          case GLUT_KEY_F8: // also the delete key on OSX
-          case GLUT_KEY_F9:
-          case GLUT_KEY_F10:
-//        case GLUT_KEY_F11: // cannot be used on OSX
-          case GLUT_KEY_F12:
-              if (echo > 9) std::printf("# %s key=F%d x=%d y=%d\n", __func__, key, x, y);
-          break;
+//           case GLUT_KEY_F1:
+//           case GLUT_KEY_F2:
+//           case GLUT_KEY_F3:
+//           case GLUT_KEY_F4:
+//           case GLUT_KEY_F5:
+//           case GLUT_KEY_F6:
+//           case GLUT_KEY_F7:
+//           case GLUT_KEY_F8: // also the delete key on OSX
+//           case GLUT_KEY_F9:
+//           case GLUT_KEY_F10:
+//  //       case GLUT_KEY_F11: // cannot be used on OSX
+//           case GLUT_KEY_F12:
+//               if (echo > 9) std::printf("# %s key=F%d x=%d y=%d\n", __func__, key, x, y);
+//           break;
 
           case GLUT_KEY_LEFT      : changed = rotate(itheta_now, iphi_now - angle); break;
           case GLUT_KEY_RIGHT     : changed = rotate(itheta_now, iphi_now + angle); break;
@@ -330,15 +356,25 @@ namespace window {
           case 's': changed = focus_on(37.5, 127, 0); break; // center on Seoul, missing Shanghai
           case 't': changed = focus_on(35.7, 139.8, 0); break; // center on Tokyo
 
-          case ' ': // space intened for start/stop
+          case ' ': // space for pause/continue
               if (echo > 17) std::printf("# %s key=[space] x=%d y=%d\n", __func__, x, y);
               if (simulation) {
-                  int const ndays_per_step = 365;
-                  // TODO spawn a thread and run while(startstop)
-                  impera::run_some_days(Nspecies, ndays_per_step);
-                  changed = true; // --> redraw
-              } else warn("simulation has not been initialized");
+                  if (simulation_is_running) {
+                      simulation_is_running = false; // pause
+                      if (echo > 1) std::printf("# Simulation paused, hit spacebar to continue! (window needs to be in focus)\n");
+                  } else {
+                      simulation_is_running = true; // continue
+                  }
+              } else {
+                  simulation_is_running = false;
+                  warn("simulation has not been initialized");
+              }
           break;
+
+          case 'q': requestquit = true; break; // quit application
+
+          case '>': case '.': change_speed(true);  break; // faster
+          case '<': case ',': change_speed(false); break; // slower
 
           case GLUT_KEY_HOME:
               if (99 == home_coords[0]) {
@@ -361,20 +397,38 @@ namespace window {
           break;
       } // switch key
 
+      if (requestquit) {
+          if (confirmquit) { // depend on static variable confirmquit
+              finalize(echo);
+              std::exit(42); // glutLeaveMainLoop(); // glutLeaveMainLoop is a freeglut extension
+          } else {
+              if (echo > 0) std::printf("\n# Hit \'%c\' again to quit!\n", key);
+              confirmquit = true;
+          } // confirmquit
+      } else if (confirmquit) {
+          if (echo > 2) std::printf("# Quitting aborted due to other key \'%c\'.\n", key);
+          confirmquit = false;
+      } // requestquit
+
       if (changed) {
           glutPostRedisplay(); // redraw
       } // changed
 
   } // key_stroke
 
-  void points_to_go() {
-      glutTimerFunc(1, timer, 0);
-  } // points_to_go
+  void key_release(int const key, int const x, int const y) {}
 
-  void timer(int const val) {
-      glutPostRedisplay(); // redraw
-      points_to_go();
-  } // timer
+//   void points_to_go(); // forward declaration
+//
+//   void timer(int const value) {
+//       std::printf("# timer(value=%d) was called\n", value);
+//       glutPostRedisplay(); // redraw
+//       points_to_go();
+//   } // timer
+//
+//   void points_to_go() {
+//       glutTimerFunc(0, timer, 0);
+//   } // points_to_go
 
   void show_vertex(float const pos[4], float const rgb[3]=nullptr) {
       if (!rgb) {
@@ -390,6 +444,12 @@ namespace window {
       glColor3f(rgb[0], rgb[1], rgb[2]); // set the color
       glVertex3f(pos[0], pos[1], pos[2]); // place a vertex
   } // show_vertex
+
+  void continue_simulation(void) {
+      if (simulation_is_running) {
+          impera::run_some_days(Nspecies, simulation_speed, echo);
+      }
+  } // continue_simulation
 
   void display(void) {
 
@@ -441,17 +501,17 @@ namespace window {
   } // display
 
 
-  void display3D(int const Level, float const *rgb) {
+  void display3D(int const Level, float const *rgb) { // public interface window::display3D
       if (!rgb)      return;
       if (Level < 0) return;
       if (!initialized) return;
       auto const n = icogrid::n_ico_vertices(Level);
       if (colors.dim1() < n) {
-          std::printf("# re-allocate global array 'colors' to view3D<float>(1, n=%ld, 3);", size_t(n));
+          if (echo > 1) std::printf("# re-allocate global array 'colors' to view3D<float>(1, n=%ld, 3);", size_t(n));
           colors = view3D<float>(1, n, 3, 0.f); // (view3D instead of view2D to query dim1)
       }
       set(colors.data(), n*3, rgb); // deep copy
-      display();
+      glutPostRedisplay(); // redraw
   } // display3D
 
 
@@ -530,7 +590,7 @@ namespace window {
   void run() {
       if (echo > 0) std::printf("# start run\n");
       glutMainLoop();
-      if (echo > 0) std::printf("# run done\n");
+      if (echo > 0) std::printf("# run done\n"); // never reached without glutLeaveMainLoop()
   } // run
 
   status_t init(int argc, char *argv[]) {
@@ -541,7 +601,10 @@ namespace window {
       glutInitDisplayMode(GLUT_RGB | GLUT_SINGLE);
       glutCreateWindow("Impera");
       glutDisplayFunc(display);
+      glutIdleFunc(continue_simulation);
       glutSpecialFunc(key_stroke);
+      glutSpecialUpFunc(key_release); // if releasing if a key should trigger something
+      glutIgnoreKeyRepeat(1);
       glutReshapeFunc(reshape_window);       // Register callback handler for window re-size event
       glutMouseFunc(mouse_click);
 //       glutPassiveMotionFunc(mouse_motion); // use __Passive__ if no button is pressed
@@ -555,30 +618,24 @@ namespace window {
       glShadeModel(GL_SMOOTH);   // Enable smooth shading
       glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);  // Nice perspective corrections
       glEnable(GL_CULL_FACE);  // show only front faces
-      initialized = 1;
+      initialized = true;
       return 0;
   } // init
 
-  status_t finalize(int const echo=0) {
-      // free dyamic memory in global quantities
-      vertex0 = view4D<float>();
-      vertex  = view4D<float>();
-      colors  = view3D<float>();
-      // destroy simulation
-      simulation = impera::run_some_days(Nspecies, -1, echo);
-      return 0;
-  } // finalize
-
-  status_t inline test_world_map(int const echo=1) {
+  status_t inline test_world_map(int const echo_argument=1) {
       status_t stat(0);
       int const Level = control::get("Level", 5.); // icosahedral grid level
+      simulation_speed = std::min(std::max(1, int(control::get("Speed", 1.))), MaxSpeed);
       stat += create_wireframe(Level, echo);
       stat += get_resource_map(Level, echo);
       stat += init(0, nullptr);
       control::set("RenderTime", "10"); // every 10 days
       control::set("DisplayTime", "-1"); // do not display the population map in the terminal
       Nspecies = control::get("Nspecies", 3.);
-      simulation = impera::run_some_days(Nspecies);
+      echo = echo_argument;
+      simulation = impera::run_some_days(Nspecies); // initialize the simulation internally
+      simulation_is_running = false; // pause
+      if (echo > 0) std::printf("# Simulation is pause, hit spacebar to start/stop.\n");
       run();
       return stat;
   } // test_world_map

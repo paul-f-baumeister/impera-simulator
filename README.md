@@ -1,6 +1,9 @@
 # impera-simulator
 A simulator for populations living and sharing resources on a (spherical) map
 
+# optional dependencies
+ - OpenGL for the GUI
+
 # how to build
 cd src
 make
@@ -33,4 +36,4 @@ make
 
 # unit test: run the simulation in a window
 ./impera --test window
-
+# to quit the window test hit 'q' twice

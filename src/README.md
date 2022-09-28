@@ -5,3 +5,4 @@ Please compile the C++ code using the accomapnying Makefile
 
 Please test the generated binary *impera* or *impera.exe* as
     ./impera -t '?'
+To quit the window test hit 'q' twice
