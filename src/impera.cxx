@@ -282,6 +282,12 @@ namespace impera {
           political_colors = view2D<float>(Nspecies + 1, 4, 0.f);
           assert(0 < political::init_political_colors(political_colors.data(), Nspecies));
 
+          size_t const memory_estimate = sizeof(real_t) * 6 * Nspecies * Nregions_aligned // main memory consumers
+                                       + sizeof(double) * 5 * Nspecies * Nspecies_aligned // Nspecies^2 tables
+                                       + sizeof(double) * 4 * Nspecies // vectors
+                                       + sizeof(float) * (1 + Nspecies); // political_colors
+          if (echo > 0) std::printf("# Memory estimate %.3f MByte\n", memory_estimate*1e-6);
+
           double const RescaleResources = control::get("RescaleResources", 1.0);
           if (1 != RescaleResources) {
               double sum{0};
@@ -315,11 +321,6 @@ namespace impera {
                   start_pop *= divisor;
               } // is
           } // scope
-
-//           if (RenderTime > 0) {
-//               std::printf("# window::init()\n");
-//               window::init();
-//           } // render_window
 
           if (run) {
               run_simulation();
@@ -363,11 +364,6 @@ namespace impera {
                   std::printf("\n");
               } // is
           } // hc
-
-//           if (RenderTime > 0) {
-//               std::printf("# window::finalize()\n");
-//               window::finalize();
-//           } // render_window
 
           std::printf("\n# Level = %d done\n", Level);
           return stat;
@@ -526,7 +522,7 @@ namespace impera {
             } // si
         } // is
 
-        for (int is = 0; is < Nspecies; ++is) {        
+        for (int is = 0; is < Nspecies; ++is) {
             allpopul[is] += pop(is,ir);
             allpower[is] += pop(is,ir) * pwr(is,ir);
             maxpop = std::max(maxpop, double(pop(is,ir)));
@@ -535,7 +531,7 @@ namespace impera {
     // ============WAR===============================================================
 
 
-    for (int is = 0; is < Nspecies; ++is) {       
+    for (int is = 0; is < Nspecies; ++is) {
         perpopul[is] = (allpopul[is] > 0) ? 1./allpopul[is] : 0;
         allpower[is] *= perpopul[is]; // normalized
         for (int js = 0; js < Nspecies; ++js) {
@@ -555,7 +551,7 @@ namespace impera {
     if (display_screen || display_pop) {
         std::printf("# year %.2f pop ", it*per_year);
         double world_pop{0};
-        for (int is = 0; is < Nspecies; ++is) {        
+        for (int is = 0; is < Nspecies; ++is) {
             std::printf(" %.2e", allpopul[is]);
             bool constexpr show_power_with_colors = true;
             if (show_power_with_colors) {
@@ -773,29 +769,35 @@ namespace impera {
 
 
   template <int NSpecies>
-  void* _run1day(int const echo) {
+  void* _run_some_days(int const ndays=1, int const echo=0) {
       static Impera_t<double,NSpecies> *simulation = nullptr;
       static uint64_t iday = 0;
-      if (nullptr == simulation) { // on first call
+      if (nullptr == simulation) {
+          iday = 0; // on first call
           simulation = new Impera_t<double,NSpecies>(echo, 0);
-          iday = 0;
-          return (void*)simulation;
-      } else { // first call
-          simulation->time_loop(iday);
-          ++iday;
+          return static_cast<void*>(simulation);
+      } else {
+          if (ndays < 0) {
+              delete simulation; // memory cleanup
+          } else {
+              for (unsigned it = 0; it < ndays; ++it) {
+                  simulation->time_loop(iday);
+                  ++iday;
+              } // it
+          }
           return nullptr;
       }
-  } // run_one_day
+  } // run_some_days
 
-  void* run_one_day(int const Nspecies, int const echo) {
+  void* run_some_days(int const Nspecies, int const ndays, int const echo) {
       switch (Nspecies) {
-          case  9:  return _run1day<9>(echo);
-          case  6:  return _run1day<6>(echo);
-          case  3:  return _run1day<3>(echo);
+          case  9:  return _run_some_days<9>(ndays, echo);
+          case  6:  return _run_some_days<6>(ndays, echo);
+          case  3:  return _run_some_days<3>(ndays, echo);
           default:  warn("Requested Nspecies= %d but only {3, 6, 9} instanciated", Nspecies);
                     return nullptr;
       } // switch Nspecies
-  } // run_one_day
+  } // run_some_days
 
 
   template <typename real_t, int Nspecies=3>

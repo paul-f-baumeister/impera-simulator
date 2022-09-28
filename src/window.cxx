@@ -39,15 +39,18 @@ namespace window {
 //   double constexpr rad2deg = 180./M_PI;
   double constexpr deg2rad = M_PI/180.;
 
+  // transfer2float and transfer2int32 allow to store an integer in a float field
   float transfer2float(uint32_t const i) { union{ uint32_t i; float f; } u{i}; return u.f; }
   uint32_t transfer2int32(float const f) { union{ float f; uint32_t i; } u{f}; return u.i; }
 
   // global quantities
-  static int echo;
   static view4D<float> vertex0; // vertices of the unrotated wireframe model of the icosahedral sphere grid
   static view4D<float> vertex;  // vertices of the wireframe model of the icosahedral sphere grid
   static view3D<float> colors;  // actual colors of the triangles (view3D instead of view2D to query dim1)
-  static int16_t itheta_now=9, iphi_now=9; // range of int16_t is [-32768, 32767]
+
+  static int initialized = 0;
+  static int echo = 0;
+  static int16_t itheta_now = 9, iphi_now = 9; // range of int16_t is [-32768, 32767]
   constexpr float zoom_max = 9;
   static float zoom = zoom_max;
   static float home_coords[2] = {99, 0}; // in degrees
@@ -60,6 +63,7 @@ namespace window {
 
   template <typename real_t, int n=3>
   void matrix_matrix(real_t axb[n][n+1], real_t const a[n][n+1], real_t const b[n][n+1]) {
+      // matrix-matrix multiplication, not performance critical
       for (int i = 0; i < n; ++i) {
           for (int j = 0; j < n; ++j) {
               real_t tmp{0};
@@ -83,18 +87,18 @@ namespace window {
       double const phi = (-90 - 4)*deg2rad - iphi*i162rad; // 4 degrees from the map shift so that SouthAmerica fits into one rhomb
 
       // rotate vertex0 --> vertex
-      auto const ca = std::cos(phi), // alpha
-                 sa = std::sin(phi),
-                 cb = std::cos(theta), // beta
-                 sb = std::sin(theta);
-//                  cg = std::cos(psi),   // gamma (roll angle?)
-//                  sg = std::cos(psi);
-//       double const matrix[3][4] = // general 3D rotation matrix with yaw, pitch and roll
+      double matrix[3][4];
+      { // scope: fill matrix
+          auto const ca = std::cos(phi), // alpha
+                     sa = std::sin(phi),
+                     cb = std::cos(theta), // beta
+                     sb = std::sin(theta);
+//                   cg = std::cos(psi),   // gamma (roll angle?)
+//                   sg = std::cos(psi);
+//        double const matrix[3][4] = // general 3D rotation matrix with yaw, pitch and roll
 //                  {{sa*sb*cg - ca*sg, ca*sb*cg + sa*sg, cb*cg,    0},
 //                   {sa*sb*sg + ca*cg, ca*sb*sg - sa*cg, cb*sg,    0},
 //                   {       sa*cb    ,        ca*cb    ,  -sb ,    0}};
-      double matrix[3][4];
-      {
           double const matrix_phi[3][4]   = {{ ca, -sa,  0 ,    0}, // turn around the z-axis
                                              { sa,  ca,  0 ,    0},
                                              { 0 ,  0 ,  1 ,    0}};
@@ -104,18 +108,20 @@ namespace window {
                                              { 0 ,  sb,  cb,    0}};
           double matrix_theta_phi[3][4];
           matrix_matrix(matrix_theta_phi, matrix_theta, matrix_phi);
-          // switch y <--> -z as in OpenGL, +y is upward
+          // switch y <--> -z as in OpenGL +y is upward
           double const matrix_swap[3][4] = {{ 1,  0,  0,    0},
                                             { 0,  0,  1,    0},
                                             { 0, -1,  0,    0}};
           matrix_matrix(matrix, matrix_swap, matrix_theta_phi);
-      }
-      // also 
-      int const tL = vertex0.dim1() - 1;
+      } // fill matrix
+
+      assert(vertex0.stride() >= 4);
+      int const tL = vertex0.dim1() - 1; assert(tL == vertex0.dim2() - 1);
       for (int i10 = 0; i10 < 10; ++i10) {
           for (int iSE = 0; iSE <= tL; ++iSE) { // south east direction
               for (int iNE = 0; iNE <= tL; ++iNE) { // north east direction
                   auto const *const vtx0 = vertex0(i10,iSE,iNE); // unrotated vectors
+                  // matrix vector multiplication, ToDo: slow, replace by dgemm for 10*(tL + 1)^2 vectors in one
                   for (int i = 0; i < 3; ++i) {
                       double tmp{0};
                       for (int j = 0; j < 3; ++j) {
@@ -168,6 +174,9 @@ namespace window {
               warn("failed to generate icogrid for Level=%d status=%i", Level, int(stat));
               return stat;
           }
+
+          // initialize member fields vertex0, vertex and colors
+          vertex  = view4D<float>(10, tL + 1, tL + 1, 4, 0.f);
           vertex0 = view4D<float>(10, tL + 1, tL + 1, 4, 0.f);
           for (int i10 = 0; i10 < 10; ++i10) {
               for (int iSE = 0; iSE <= tL; ++iSE) { // south east direction
@@ -184,15 +193,15 @@ namespace window {
               } // iSE
           } // i10
 
-          colors = view3D<float>(1, icogrid::n_ico_vertices(Level), 3, .25f); // initialize color buffer all triangles dark grey
-          vertex = view4D<float>(10, tL + 1, tL + 1, 4, 0.f);
           rotate(); // transfer vertex0 into vertex, initialize (theta_now,phi_now)
-          
+
+          colors = view3D<float>(1, icogrid::n_ico_vertices(Level), 3, .25f); // initialize color buffer all triangles dark grey
+
       } // scope
       return stat;
   } // create_wireframe
 
-  
+
   void where_was_the_click(int const x, int const y, GLfloat xy[2]=nullptr) {
       auto const width  = glutGet(GLUT_WINDOW_WIDTH); // ToDo: move these into global variables that get updated on resize
       auto const height = glutGet(GLUT_WINDOW_HEIGHT);
@@ -209,7 +218,7 @@ namespace window {
       // at distance 2.887 earth radii, the earth circumference is at xr == yr == +/-0.446
       // at distance 2.027 earth radii, the earth circumference is at xr == yr == +/-0.6845
   } // where_was_the_click
-  
+
   void mouse_click(int const button, int const state, int const x, int const y) {
       // int constexpr WHEEL_UP = 3, WHEEL_DOWN = 4; // https://stackoverflow.com/questions/14378/using-the-mouse-scrollwheel-in-glut seems not to work on OSX
       int const button012 = (GLUT_LEFT_BUTTON   == button) ? 0 : (
@@ -258,7 +267,7 @@ namespace window {
           std::printf("# Mouse drag at y=%d --> new zoom %g\n", y, new_zoom);
           changed = change_zoom(new_zoom);
       }
-      
+
       // else { std::printf("# Mouse move at x=%d y=%d\n", x, y); }
       if (changed) glutPostRedisplay(); // redraw
   } // mouse
@@ -266,7 +275,7 @@ namespace window {
   inline bool focus_on(double const theta_degree, double const phi_degree, float const zoom_level=zoom_max) {
       return change_zoom(zoom_level) || rotate(theta_degree*deg2i16, phi_degree*deg2i16);
   } // focus_on
-  
+
   static void key_stroke(int const key, int const x, int const y) {
       // beware: x,y can be negative
       auto const angle = angle_of_zoom(zoom);
@@ -321,13 +330,14 @@ namespace window {
           case 's': changed = focus_on(37.5, 127, 0); break; // center on Seoul, missing Shanghai
           case 't': changed = focus_on(35.7, 139.8, 0); break; // center on Tokyo
 
-          case ' ': // space for start/stop
+          case ' ': // space intened for start/stop
               if (echo > 17) std::printf("# %s key=[space] x=%d y=%d\n", __func__, x, y);
               if (simulation) {
+                  int const ndays_per_step = 365;
                   // TODO spawn a thread and run while(startstop)
-                  impera::run_one_day(Nspecies);
+                  impera::run_some_days(Nspecies, ndays_per_step);
                   changed = true; // --> redraw
-              } else warn("simluation has not been initialized");
+              } else warn("simulation has not been initialized");
           break;
 
           case GLUT_KEY_HOME:
@@ -341,7 +351,7 @@ namespace window {
           case 127: // DELETE
               if (echo > 9) std::printf("# %s key=DEL x=%d y=%d\n", __func__, x, y);
           break;
-          
+
           default:
               if (key < 32) {
                   if (echo > 9) std::printf("# %s key=ASCII#%d x=%d y=%d\n", __func__, key, x, y); // non printable characters
@@ -350,21 +360,21 @@ namespace window {
               }
           break;
       } // switch key
+
       if (changed) {
           glutPostRedisplay(); // redraw
-      }
+      } // changed
+
   } // key_stroke
 
-  void points_to_go(); // forward declaration
+  void points_to_go() {
+      glutTimerFunc(1, timer, 0);
+  } // points_to_go
 
   void timer(int const val) {
       glutPostRedisplay(); // redraw
       points_to_go();
   } // timer
-
-  void points_to_go() {
-      glutTimerFunc(1, timer, 0);
-  } // points_to_go
 
   void show_vertex(float const pos[4], float const rgb[3]=nullptr) {
       if (!rgb) {
@@ -383,13 +393,15 @@ namespace window {
 
   void display(void) {
 
+      if (!initialized) return;
+
 //           float const red  [] = {1.f, 0.f, 0.f};
 //           float const green[] = {0.f, 1.f, 0.f}; // base colors
 //           float const blue [] = {0.f, 0.f, 1.f};
 
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Clear color and depth buffers
       glMatrixMode(GL_MODELVIEW);     // To operate on model-view matrix
-    
+
       // Render a sphere with a icosahredral grid
       glLoadIdentity();               // Reset the model-view matrix
       glTranslatef(0.f, 0.f, -zoom_distance(zoom)); // Move right and into the screen
@@ -432,9 +444,10 @@ namespace window {
   void display3D(int const Level, float const *rgb) {
       if (!rgb)      return;
       if (Level < 0) return;
+      if (!initialized) return;
       auto const n = icogrid::n_ico_vertices(Level);
       if (colors.dim1() < n) {
-          // re-allocate global array 'colors'
+          std::printf("# re-allocate global array 'colors' to view3D<float>(1, n=%ld, 3);", size_t(n));
           colors = view3D<float>(1, n, 3, 0.f); // (view3D instead of view2D to query dim1)
       }
       set(colors.data(), n*3, rgb); // deep copy
@@ -542,14 +555,17 @@ namespace window {
       glShadeModel(GL_SMOOTH);   // Enable smooth shading
       glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);  // Nice perspective corrections
       glEnable(GL_CULL_FACE);  // show only front faces
+      initialized = 1;
       return 0;
   } // init
 
-  status_t finalize() {
+  status_t finalize(int const echo=0) {
       // free dyamic memory in global quantities
       vertex0 = view4D<float>();
       vertex  = view4D<float>();
       colors  = view3D<float>();
+      // destroy simulation
+      simulation = impera::run_some_days(Nspecies, -1, echo);
       return 0;
   } // finalize
 
@@ -559,10 +575,10 @@ namespace window {
       stat += create_wireframe(Level, echo);
       stat += get_resource_map(Level, echo);
       stat += init(0, nullptr);
-      control::set("RenderTime", "1");
-      control::set("DisplayTime", "-1");
+      control::set("RenderTime", "10"); // every 10 days
+      control::set("DisplayTime", "-1"); // do not display the population map in the terminal
       Nspecies = control::get("Nspecies", 3.);
-      simulation = impera::run_one_day(Nspecies);
+      simulation = impera::run_some_days(Nspecies);
       run();
       return stat;
   } // test_world_map
@@ -570,7 +586,7 @@ namespace window {
   status_t all_tests(int const echo) {
       status_t stat(0);
       stat += test_world_map(echo);
-      stat += finalize();
+      stat += finalize(echo);
       return stat;
   } // all_tests
 

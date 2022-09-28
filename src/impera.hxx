@@ -11,7 +11,7 @@ namespace impera {
   } // read_resource_file
 
   // interface for running the simulation in the background of a window GUI
-  void* run_one_day(int const Nspecies, int const echo=9);
+  void* run_some_days(int const Nspecies, int const ndays=1, int const echo=9);
 
   // start the simulation in the terminal
   int all_tests(int const echo=1);
