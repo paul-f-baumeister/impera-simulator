@@ -231,11 +231,11 @@ namespace window {
       if (xy) {
           xy[0] = x/(0.5*width) - 1.;
           xy[1] = 1. - y/(0.5*height);
-      } else {
+      } else if (echo > 7) {
           auto const min_wh = std::max(1, std::min(width, height));
           auto const xr = (x -  width*.5)/min_wh;
           auto const yr = (y - height*.5)/min_wh;
-          if (echo > 7) std::printf("# click at (x=%d, y=%d) --> (%g, %g)\n", x, y, xr, yr);
+          std::printf("# click at (x=%d, y=%d) --> (%g, %g)\n", x, y, xr, yr);
       }
       // at distance 3.247 earth radii, the earth circumference is at xr == yr == +/-0.39
       // at distance 2.887 earth radii, the earth circumference is at xr == yr == +/-0.446
