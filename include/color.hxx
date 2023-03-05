@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdio> // std::printf, ::sprintf, ::snprintf
+#include <cstdio> // std::printf, ::snprintf
 
 #include "status.hxx" // status_t
 
@@ -95,7 +95,7 @@ namespace color {
 
   inline string15_t colorchar(float const rd, float const gr, float const bl) { // rgb <= 1
       int const i = 16 + int(std::round(rd*5) + 6*(std::round(gr*5) + 6*std::round(bl*5)));
-      string15_t s; std::sprintf(s.data(), "%c[48;5;%im", esc, i);
+      string15_t s; std::snprintf(s.data(), 15, "%c[48;5;%im", esc, i);
       return s;
   } // colorchar
 
@@ -117,7 +117,7 @@ namespace color {
 
     
 //     for (int i = 0; i < 256; ++i) {
-//         char c[16]; std::sprintf(c, "%c[48;5;%im", esc, i);
+//         char c[16]; std::snprintf(c, 16, "%c[48;5;%im", esc, i);
 //         char const x = ((i - 16) % 43) ? ' ' : 'x';
 //       std::printf("(2A)",advance="no") trim(c),x
 //       if(any([7,15,(15+k*36, k=0,5),231,255]==i)) std::printf("(2A)",advance="yes") c(1:2),"m" 

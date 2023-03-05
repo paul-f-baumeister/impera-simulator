@@ -2,16 +2,13 @@
 
 #include "status.hxx" // status_t
 
-#include <cstdio> // printf, std::fprintf, std::sprintf, stdout, stderr, std::fflush
+#include <cstdio> // printf, std::fprintf, std::snprintf, stdout, stderr, std::fflush
 #include <cstring> // std::strrchr
 #include <utility> // std::forward, std::pair<T1,T1>
 
 namespace warnings {
-
-// #define warn(...) std::sprintf(warnings::_new_warning(__FILE__, __LINE__, __func__), __VA_ARGS__);
-//   char* _new_warning(char const *file, int const line, char const *func); // hidden, please use the macro above
   
-   std::pair<char*,int> _new_warning(char const *file, int const line, char const *func); // hidden, please use the macro above
+#define warn(...) warnings::_print_warning_message(__FILE__, __LINE__, __func__, __VA_ARGS__);
 
 #define error(...) { \
     warnings::_print_error_message(stdout, __FILE__, __LINE__, __VA_ARGS__ ); \
@@ -25,13 +22,15 @@ namespace warnings {
         std::fprintf(os, "\n\n");
         std::fflush(os);
   } // _print_error_message
-  
-#define warn(...) warnings::_print_warning_message(__FILE__, __LINE__, __func__, __VA_ARGS__);
 
   inline char const * after_last_slash(char const *path_and_file, char const slash='/') {
       auto const has_slash = std::strrchr(path_and_file, slash);
       return has_slash ? (has_slash + 1) : path_and_file;
   } // after_last_slash
+
+  std::pair<char*,int> _new_warning(char const *file, int const line, char const *func); // forward declaration
+
+  int constexpr MaxWarningLength = 512;
 
   template <class... Args>
   int _print_warning_message(char const *srcfile, unsigned const srcline, char const* func, Args &&... args) {
@@ -39,7 +38,7 @@ namespace warnings {
       char*   message = str_int.first;
       int const flags = str_int.second;
       // generate the warning message
-      int const nchars = std::sprintf(message, std::forward<Args>(args)...);
+      int const nchars = std::snprintf(message, MaxWarningLength, std::forward<Args>(args)...);
 
       // check decisions if the message should be printed
       if (flags & 1) { // warning to stdout

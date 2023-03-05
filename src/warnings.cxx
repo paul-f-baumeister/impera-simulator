@@ -49,7 +49,7 @@ namespace warnings {
         , source_file_line_(line)
       {
           hash_ = combined_hash(file, line);
-          message_ = new char[message_length];
+          message_ = new char[std::min(message_length, MaxWarningLength)];
 #ifdef  DEBUG          
           if (1) printf("# WarningRecord:constructor allocates a new warning message string with max. %d chars"
               " at %p\n# ... for warnings launched at %s:%d --> hash = %16llx\n", 
@@ -83,6 +83,7 @@ namespace warnings {
                       __FILE__, __LINE__, __func__, file, line, echo);
 
     static std::map<uint64_t,WarningRecord> map_;
+
     if (line < 1) { // line numbers created by the preprocessor start from 1
         assert('?' == file[0]); // make sure that we want special functionality
         
@@ -177,7 +178,7 @@ namespace warnings {
     if (echo > 1) printf("\n# %s:%d  %s\n\n", __FILE__, __LINE__, __func__);
     WarningRecord wr(__FILE__,__LINE__,__func__);
     auto const msg = wr.get_message();
-    std::sprintf(msg, "This is a non-recorded warning! Text created in %s:%d", __FILE__, __LINE__);
+    std::snprintf(msg, MaxWarningLength, "This is a non-recorded warning! Text created in %s:%d", __FILE__, __LINE__);
     return 0;
   } // test_create_and_destroy
 

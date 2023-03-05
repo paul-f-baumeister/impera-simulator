@@ -1,4 +1,4 @@
-SYSTEM ?= zam044
+HOSTNAME := $(shell hostname)
 
 # For reproducability compile the git key (hash) into the code
 GITKEY = $(shell git log | head -1 | sed -e 's/commit //g')
@@ -30,12 +30,14 @@ allclean: clean
 CXX    = g++
 
 SRC ?= ./src
-INC =
+INC ?=
 # INC += -I/usr/local/cuda/include
+INC += -I../include
 
-LDFLAGS =
-ERRFLAGS =
-FEAFLAGS =
+LDFLAGS ?=
+ERRFLAGS ?=
+FEAFLAGS ?=
+
 FEAFLAGS += -D_GIT_KEY=$(GITKEY) 
 # ERRFLAGS = -Werror -Wall -Wfatal-errors
 # FEAFLAGS += -fopenmp -pthread
@@ -69,11 +71,12 @@ CUOPTFLAGS += -O3 --use_fast_math
 
 EXTFLAGS ?=
 
-ifeq ($(SYSTEM),zam044)
-	EXTFLAGS += -D HAS_no_MKL
-#	LDFLAGS += -lm -lblas -llapack ### works on zam044 (MacBook Pro)
+ifeq ($(HOSTNAME),MacBook-Pro.local)
+# ifeq ($(HOSTNAME),zam044)
+# 	EXTFLAGS += -D HAS_no_MKL
+	LDFLAGS += -lm -lblas -llapack
 else
-	## eq ($(THISMACHINE), "zam054")
+	## eq ($(HOSTNAME),zam054)
 	### works with g++ on zam054 (JSC workstation)
 	LDFLAGS += -lm -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread 
 endif
@@ -90,29 +93,21 @@ ${EXECUTABLE}: ${OBJ}
 
 %.o:${SRC}/%.c %.d
 	${CC} ${CCFLAGS} ${INC} -c $<
-%.o:${SRC}/%.cu %.d
-	${CU} ${CUFLAGS} ${INC} -c $<
 %.o:${SRC}/%.cxx %.d
 	${CXX} ${CXXFLAGS} ${INC} -c $<
 
 %.o:%.c %.d
 	${CC} ${CCFLAGS} ${INC} -c $<
-%.o:%.cu %.d
-	${CU} ${CUFLAGS} ${INC} -c $<
 %.o:%.cxx %.d
 	${CXX} ${CXXFLAGS} ${INC} -c $<
 
 %.d:${SRC}/%.c
 	${CC} ${CFLAGS} ${INC} -MM $^ -MF $@
-%.d:${SRC}/%.cu
-	${CC} -x c++ ${CFLAGS} ${INC} -MM $^ -MF $@
 %.d:${SRC}/%.cxx
 	${CXX} ${CXXFLAGS} ${INC} -MM $^ -MF $@
 
 %.d:%.c
 	${CC} ${CFLAGS} ${INC} -MM $^ -MF $@
-%.d:%.cu
-	${CC} -x c++ ${CFLAGS} ${INC} -MM $^ -MF $@
 %.d:%.cxx
 	${CXX} ${CXXFLAGS} ${INC} -MM $^ -MF $@
 

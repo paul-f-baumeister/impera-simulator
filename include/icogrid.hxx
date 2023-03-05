@@ -673,7 +673,7 @@ namespace icogrid {
               if (hist[m] > 0 && echo > 0) printf("# %d %d\n", m, hist[m]);
           } // m
           auto const reference = n_ico_vertices(Level);
-          if (echo > 0) printf("# Histogramm checksum %ld reference %ld\n", msum, reference);
+          if (echo > 0) printf("# Histogramm checksum %ld reference %ld, sum %ld\n", msum, reference, sum);
           if (reference != msum) warn("total number of vertices %ld deviates from %ld", msum, reference);
           if (hist[12] != 1) warn("number of base points must be 10 + 2");
           if (Level > 0 && hist[30] != 1) warn("expect 30 edge-center points");
