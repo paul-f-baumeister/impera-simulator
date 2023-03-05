@@ -63,7 +63,7 @@ namespace bitmap {
               if (b > 255) b=255;
               img[j*3 + 2] = (unsigned char)(r);
               img[j*3 + 1] = (unsigned char)(g);
-              img[j*3    ] = (unsigned char)(b);
+              img[j*3 + 0] = (unsigned char)(b);
           } // j
           std::fwrite(img.data(), 3, w, f);
           std::fwrite(bmppad, 1, (4-(w*3)%4)%4, f);

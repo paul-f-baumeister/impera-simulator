@@ -94,14 +94,14 @@ namespace color {
   typedef string_t<16> string15_t;
 
   inline string15_t colorchar(float const rd, float const gr, float const bl) { // rgb <= 1
-      int const i = 16 + int(std::round(rd*5) + 6*(std::round(gr*5) + 6*std::round(bl*5)));
+      int const i = 16 + int(std::round(bl*5) + 6*(std::round(gr*5) + 6*std::round(rd*5)));
       string15_t s; std::snprintf(s.data(), 15, "%c[48;5;%im", esc, i);
       return s;
   } // colorchar
 
   inline string15_t colorchar(float const rgb[3]) { return colorchar(rgb[0], rgb[1], rgb[2]); }
-  
-  status_t inline test(int const echo=0) {
+
+  inline status_t test(int const echo=0) {
     
     string15_t c;
 
@@ -150,9 +150,7 @@ namespace color {
 
       return 0;
   } // test 
-
   
-  inline
-  status_t all_tests(int const echo=1) { return test(echo); }
+  inline status_t all_tests(int const echo=1) { return test(echo); }
   
 } // namespace color

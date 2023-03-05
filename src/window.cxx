@@ -32,7 +32,7 @@
 
 namespace window {
 
-  // conversion factors for internal angle unit
+  // conversion factors for internal angle unit i16 in [-32768, 32767] --> 5.5 milli-degrees granularity
   double constexpr i162rad = M_PI/32768.;
   double constexpr i162deg = 180./32768.;
   double constexpr deg2i16 = 32768./180.;
@@ -98,7 +98,7 @@ namespace window {
                      sa = std::sin(phi),
                      cb = std::cos(theta), // beta
                      sb = std::sin(theta);
-//                   cg = std::cos(psi),   // gamma (roll angle?)
+//                   cg = std::cos(psi),   // gamma (roll angle?) --> we do not allow the Earth to roll (as e.g. in GoogleEarth) as this may put the map upside down which leads to confusion.
 //                   sg = std::cos(psi);
 //        double const matrix[3][4] = // general 3D rotation matrix with yaw, pitch and roll
 //                  {{sa*sb*cg - ca*sg, ca*sb*cg + sa*sg, cb*cg,    0},
@@ -502,14 +502,14 @@ namespace window {
 
 
   void display3D(int const Level, float const *rgb) { // public interface window::display3D
-      if (!rgb)      return;
-      if (Level < 0) return;
-      if (!initialized) return;
+      if (nullptr == rgb) return;
+      if (Level < 0)      return;
+      if (!initialized)   return;
       auto const n = icogrid::n_ico_vertices(Level);
       if (colors.dim1() < n) {
-          if (echo > 1) std::printf("# re-allocate global array 'colors' to view3D<float>(1, n=%ld, 3);", size_t(n));
-          colors = view3D<float>(1, n, 3, 0.f); // (view3D instead of view2D to query dim1)
-      }
+          if (echo > 1) std::printf("# re-allocate global array 'colors' to view3D<float>(1, n=%g, 3);", 1.*n);
+          colors = view3D<float>(1, n, 3, 0.f); // (view3D instead of view2D to query dim1 == n)
+      } // array too small
       set(colors.data(), n*3, rgb); // deep copy
       glutPostRedisplay(); // redraw
   } // display3D
@@ -560,7 +560,7 @@ namespace window {
       status_t stat(0);
       auto const ResourceFileBaseName  = control::get("ResourceFileBaseName", "mapfile_L");
       auto const ResourceFileExtension = control::get("ResourceFileExtension", ".dat");
-      auto const ResourceFilePath      = control::get("ResourceFilePath", "../icogrid");
+      auto const ResourceFilePath      = control::get("ResourceFilePath", "../data/icogrid");
       char infilename[96];
       std::snprintf(infilename, 95, "%s/%s%i%s", ResourceFilePath, ResourceFileBaseName, Level, ResourceFileExtension);
       if (echo > 0) std::printf("# read resource map from '%s'\n", infilename);
@@ -619,6 +619,7 @@ namespace window {
       glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);  // Nice perspective corrections
       glEnable(GL_CULL_FACE);  // show only front faces
       initialized = true;
+      focus_on(30, 100); // in between Huang He and Ganges rivers
       return 0;
   } // init
 

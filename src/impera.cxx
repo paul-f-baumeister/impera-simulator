@@ -27,18 +27,18 @@ namespace impera {
 
   using namespace mpi_replacements; // MPI_*
 
-  void display_in_terminal(view3D<float> const & pop_map, int const height, int const width) {
+  void display_in_terminal(view3D<float> const & population_map, int const height, int const width) {
       std::fflush(stdout);
       for (int ih = 0; ih < height; ++ih) {
-          std::printf("~~~~");
+          std::printf("~~~~"); // mark the beginning of an ASCII pixel row
           for (int iw = 0; iw < width; ++iw) {
-              auto const rgb = pop_map(ih, iw);
-              auto const red   = rgb[2];
+              auto const rgb = population_map(ih, iw);
+              auto const red   = rgb[0];
               auto const green = rgb[1];
-              auto const blue  = rgb[0];
+              auto const blue  = rgb[2];
               std::printf("%s ", color::colorchar(red, green, blue).c_str());
           } // iw
-          std::printf("%s~~~~\n", color::def);
+          std::printf("%s~~~~\n", color::def); // mark the beginning of an ASCII pixel row
       } // ih
       std::fflush(stdout);
   } // display_in_terminal
@@ -168,7 +168,7 @@ namespace impera {
           , PicturePath          (control::get("PicturePath", "../pic"))
           , ResourceFileBaseName (control::get("ResourceFileBaseName", "mapfile_L"))
           , ResourceFileExtension(control::get("ResourceFileExtension", ".dat"))
-          , ResourceFilePath     (control::get("ResourceFilePath", "../icogrid"))
+          , ResourceFilePath     (control::get("ResourceFilePath", "../data/icogrid"))
           , DisplayPolitical     (control::get("DisplayPolitical", 0.)) // 0:never, 1:always
           , Level                (control::get("Level", 3.)) // icosahedral grid level
     { // constructor body
@@ -188,14 +188,13 @@ namespace impera {
                 assert(nregions == icomap::n_ico_vertices(Level));
                 int const h = icomap::map_height(Level),
                           w = icomap::map_width(Level);
-                view2D<float> resource_ico(nregions, 4, 0.f);
+                view2D<float> resource_ico(nregions, 4, 0.f); // [blue,green,red,padding]
                 double scale{0};
                 bool const output_resource = (control::get("OutputResource", 0.) > 0);
                 for (size_t ir = 0; ir < nregions; ++ir) {
                     double const r = std::sqrt(std::sqrt(resources[ir].resources));
-                    resource_ico(ir,0) = r; // red
-                    resource_ico(ir,1) = 0; // green
-                    resource_ico(ir,2) = 0; // blue
+                    set(resource_ico[ir], 3, float(r)); // grey
+                    if (0 == (ir >> (2*Level))) set(resource_ico[ir], 1, 0.f); // color one rhomb
                     if (output_resource) std::printf("%g\n", r);
                     scale = std::max(scale, r);
                 } // ir
@@ -278,7 +277,7 @@ namespace impera {
           perpopul       = std::vector<double>(Nspecies, 0.0); // (s)
 
 
-          // colors for the political map
+          // colors for the political map, these colors should be one distinct RGB combination per species
           political_colors = view2D<float>(Nspecies + 1, 4, 0.f);
           assert(0 < political::init_political_colors(political_colors.data(), Nspecies));
 
@@ -300,26 +299,52 @@ namespace impera {
           } // RescaleResources
 
 
-          { // scope: initialize
+          { // scope: initialize where population seeds are
               float start_pop{1e3}; float t{9e37};
               float const divisor = (Nspecies > 12) ? 0.75f : 0.5f; // fails to place 32 species with 0.5
+              int start_location[Nspecies];
               for (int is = 0; is < Nspecies; ++is) { // serial loop over species, loop-carried dependency
-                  int ivr{-1}; float maxres{0};
+                  int ivr{-1}; // maxloc
+                  float maxres{-1};
                   #pragma omp parallel for
                   for(size_t ir = 0; ir < Nregions; ++ir) {
                       auto const res = resources[ir].resources;
                       #pragma omp critical
                       if (res < t && res > maxres) { maxres = res; ivr = ir; }
-                      pwr(is,ir) = is ? pwr(is - 1,ir)/2 : 100;
+                      pwr(is,ir) = is ? pwr(is - 1,ir)/2 : 100; // power 100 for the 1st species
                   } // ir
-                  assert(ivr > -1);
+                  assert(ivr > -1 && "none of the regions had a maximum");
                   pop(is,ivr) = start_pop; // start in a fruitful region
 
                   std::printf("# population #%i starts in region #%i with %g resources\n", is, ivr, maxres);
+                  start_location[is] = ivr;
 
                   t = resources[ivr].resources * divisor;
                   start_pop *= divisor;
               } // is
+
+              { // scope show start locations in geo-coordinates
+                  char const location_i10[12][16] = {
+                        "Europe",       // i10 == 0 Europe & NorthWestAfrica
+                        "EastAfrica",   // i10 == 1 Egypt to SouthAfrica
+                        "India",        // i10 == 2 India, MiddleEast & CentralAsia
+                        "SouthAsia",    // i10 == 3 Indonesia & EastAustralia
+                        "EastAsia",     // i10 == 4 China, Japan, Korea, Philippines, Papua-NG, NorthernAustralia
+                        "Oceania",      // i10 == 5 WestAustralia, NewZealand and Oceania
+                        "NorthPacific", // i10 == 6 US-WestCoast, Alaska, Hawaii
+                        "EastPacific",  // i10 == 7 only water
+                        "America",      // i10 == 8 NorthAmerica, MiddleAmerica, NorthWestern-SouthAmerica
+                        "SouthAmerica", // i10 == 9 Brazil, Argentina, Chile, Bolivia, Paraguay, Uruguay
+                        "PolarRegion",  // i10 == 10 (probably the Artic, as no one can live in Antarctica)
+                        "?"};           // i10  > 10
+                  for (int is = 0; is < Nspecies; ++is) {
+                      auto const ivr = start_location[is];
+                      auto const i10 = ivr >> (2*Level); // 4^Level points per rhomb
+                      auto const ccc = species_color(is);
+                      std::printf("# pop #%i %s(color)%s starts at %s\n", is, ccc.c_str(), color::def, location_i10[std::min(i10,11)]);
+                  } // is
+              } // scope
+
           } // scope
 
           if (run) {
@@ -555,7 +580,7 @@ namespace impera {
             std::printf(" %.2e", allpopul[is]);
             bool constexpr show_power_with_colors = true;
             if (show_power_with_colors) {
-                auto const ccc = color::colorchar(0 == (is%3), 0 == ((is + 1)%3), 0 == ((is + 2)%3));
+                auto const ccc = species_color(is);
                 std::printf("%s@%.1f%s", ccc.c_str(), allpower[is], color::def);
             } // show_power_with_colors
             world_pop += allpopul[is];
@@ -567,17 +592,13 @@ namespace impera {
     bool const render_window = (RenderTime > 0) && (0 == (it % RenderTime));
     if (export_bitmap || display_screen || render_window) {
 
-        std::vector<uint8_t> color_mapping(Nspecies);
-        for (int is = 0; is < Nspecies; ++is) {
-            color_mapping[is] = is % 3;
-        } // is
         view2D<float> pop_ico(Nregions, 3, 0.f);
         float max_p{0};
         for (size_t ir = 0; ir < Nregions; ++ir) {
             auto const pi = pop_ico[ir];
             for (int is = 0; is < Nspecies; ++is) {
-                float const p = std::sqrt(std::sqrt(pop(is,ir)));
-                pi[color_mapping[is]] += p;
+                float const p = std::sqrt(std::sqrt(pop(is,ir))); // population strength ^{1/4} --> make small populations visible
+                pi[color_mapping(is)] += p;
             } // is
             max_p = std::max(std::max(std::max(pi[0], pi[1]), pi[2]), max_p);
         } // is
@@ -649,7 +670,8 @@ namespace impera {
         assert(0 < political::update_political_colors(political_colors.data(), Nspecies, ovl.data()));
 
         // find out which cell has which color in the political map
-        std::vector<int16_t> strongest_species(Nregions, -1); // -1:uninitialize
+        assert(Nspecies < 256 && "Cannot store species indices in uint8_t");
+        std::vector<uint8_t> strongest_species(Nregions, -1); // -1:uninitialize
         for (size_t ir = 0; ir < Nregions; ++ir) {
             real_t max_strength{1e-9}; // increase this threshold to slow down the conquest of uninhabitated land (and sea).
             int strongest{Nspecies}; // Nspecies:none
@@ -670,7 +692,8 @@ namespace impera {
         // and also there is a stronger repulsion of two species that have an overlap.
         view2D<float> pop_ico(Nregions, 4, 0.f);
         for (size_t ir = 0; ir < Nregions; ++ir) {
-            set(pop_ico[ir], 3, political_colors[strongest_species[ir]]);
+            int const iss = strongest_species[ir];
+            set(pop_ico[ir], 3, political_colors[iss]);
         } // ir
         int const h = icomap::map_height(Level), w = icomap::map_width(Level);
         view3D<float> pol_map(h, w, 4, 0.f);
@@ -763,6 +786,12 @@ namespace impera {
     return stat;
   } // it time-loop
 
+  private:
+
+    inline int color_mapping(int const is) { return is % 3; }
+    inline color::string15_t species_color(int const is) {
+        auto const cm = color_mapping(is);
+        return color::colorchar(0 == cm, 1 == cm, 2 == cm); }
 
   }; // class Impera_t
 
@@ -810,7 +839,7 @@ namespace impera {
       bool const dp = ('d' == (*control::get("real_t", "double") | 32));
       int const Nspecies = control::get("Nspecies", 3.);
       switch (Nspecies) {
-//        case 32:  return dp ? start<double,32>(echo) : start<float,32>(echo);
+          case 32:  return dp ? start<double,32>(echo) : start<float,32>(echo);
 //        case 12:  return dp ? start<double,12>(echo) : start<float,12>(echo);
 //        case  9:  return dp ? start<double, 9>(echo) : start<float, 9>(echo);
 //        case  6:  return dp ? start<double, 6>(echo) : start<float, 6>(echo);

@@ -3,7 +3,7 @@
 #include <cstdio> // std::printf, ::fopen, ::fprintf, ::fclose
 #include <cassert> // assert
 // #include <algorithm> // std::min
-#include <cmath> // std::cos, ::sin, M_PI
+#include <cmath> // std::cos, ::sin, M_PI, ::sqrt
 #include <ctime> // std::time, ::time_t, ::put_time
 #include <iomanip> // std::put_time
 #include <vector> // std::vector<T>
@@ -15,8 +15,27 @@
 #include "warnings.hxx" // warn
 
 namespace icogrid {
+  // Icosahedral grid construction
 
   double constexpr Degrees72 = 2*M_PI/5.; // angle between two pentagon points
+
+  inline void base_point(double v[3], int const i10) {
+      double const factor = std::sqrt(4/5.);
+      double const angle = (i10 - 1)*(M_PI/5.); // the -1 makes the 0-th meridian pass in the middle through the 0-th rhomb (better to represent Europe)
+//    double const angle = (i10 - 1 - 4./36.)*(M_PI/5.); // in order to fit SouthAmerica intirely into rhomb#3, shift by -4 degrees
+      v[0] = factor*std::cos(angle);
+      v[1] = factor*std::sin(angle);
+      v[2] = factor*(0.5 - (i10 & 0x1)); // i & 0x1 is eqivalent to (i + 2)%2
+      /*
+       *    N   N   N   N   NorthPole
+       *   / \ / \ / \ / \ / \
+       *  0 - 2 - 4 - 6 - 8 - 0
+       *   \ / \ / \ / \ / \ / \
+       *    1 - 3 - 5 - 7 - 9 - 1
+       *     \ / \ / \ / \ / \ /
+       *      S   S   S   S   SouthPole
+       */
+  } // base_point of a rhomb in a doedecahedron inside a unit sphere
 
   inline constexpr
   size_t rhomb_edge(unsigned const Level) { return (1ul << Level); }
@@ -24,6 +43,10 @@ namespace icogrid {
   inline constexpr
   size_t ico_index(unsigned const Level, unsigned const i10, unsigned const iSE, unsigned const iNE) {
       return (i10*rhomb_edge(Level) + iSE)*rhomb_edge(Level) + iNE; }
+
+
+  inline constexpr
+  size_t n_ico_triangles(unsigned const Level) { return 20*pow2(rhomb_edge(Level)); }
 
   inline constexpr
   size_t n_ico_vertices(unsigned const Level) { return ico_index(Level, 10, 0, 2); } // 2 because we add NorthPole and SouthPole
@@ -71,30 +94,9 @@ namespace icogrid {
       return (j10*tL + jSE)*tL + jNE;
   } // ico_index_wrap
 
-  inline constexpr
-  size_t n_ico_triangles(unsigned const Level) { return 20*pow2(rhomb_edge(Level)); }
-
   inline double norm2(double const x, double const y, double const z) { return pow2(x) + pow2(y) + pow2(z); }
   inline double norm2(double const v[3]) { return norm2(v[0], v[1], v[2]); }
   inline double normalize(double const v[3]) { return 1./std::sqrt(norm2(v)); }
-
-  inline void base_point(double v[3], int const i10) {
-      double const factor = std::sqrt(4/5.);
-      double const angle = (i10 - 1)*(M_PI/5.); // the -1 makes the 0-th meridian pass in the middle through the 0-th rhomb (better to represent Europe)
-//    double const angle = (i10 - 1 - 4./36.)*(M_PI/5.); // in order to fit SouthAmerica intirely into rhomb#3, shift by -4 degrees
-      v[0] = factor*std::cos(angle);
-      v[1] = factor*std::sin(angle);
-      v[2] = factor*(0.5 - (i10 & 0x1)); // i & 0x1 is eqivalent to (i + 2)%2
-      /*
-       *    N   N   N   N   NorthPole
-       *   / \ / \ / \ / \ / \
-       *  0 - 2 - 4 - 6 - 8 - 0
-       *   \ / \ / \ / \ / \ / \
-       *    1 - 3 - 5 - 7 - 9 - 1
-       *     \ / \ / \ / \ / \ /
-       *      S   S   S   S   SouthPole
-       */
-  } // base_point of a rhomb in a doedecahedron inside a unit sphere
 
   template <typename real_t> inline
   void crossProduct(real_t axb[3], real_t const a[3], real_t const b[3]) { 
