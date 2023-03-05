@@ -1,9 +1,11 @@
-#include <cstdio> // std::printf, ::snprintf
+#include <cstdio> // std::printf, ::snprintf, ::fflush, stdout
 #include <cassert> // assert
-#include <cstdint> // int64_t, uint32_t, uint8_t
-#include <fstream> // std::fstream
-#include <sstream> // std::sstream
-#include <string> // std::string
+#include <cstdint> // int64_t, uint64_t, uint8_t
+#include <fstream> // std::ifstream
+#include <sstream> // std::istringstream
+#include <algorithm> // std::min, ::max, ::swap
+#include <cmath> // std::sqrt
+#include <string> // std::string, ::getline
 #include <vector> // std::vector<T>
 
 #ifdef _OPENMP
@@ -11,17 +13,16 @@
 #endif // _OPENMP
 #include "mpi_replacements.hxx" // MPI_Wtime, ...
 
-#include "icomap.hxx" // ::create_world_map, GridCell_t, ::n_ico_vertices
+#include "icomap.hxx" // GridCell_t, ::create_world_map, ::map_height, ::map_width, ::n_ico_vertices
 #include "config.hxx" // constants ...
 #include "bitmap.hxx" // ::write_bmp_file
-#include "color.hxx" // ::def, ::colorchar, ::display
+#include "color.hxx" // ::def, ::colorchar, ::string15_t, ::colorcode
 #include "data_view.hxx" // view2D<T>, view3D<T>
-
 #include "status.hxx" // status_t
 #include "control.hxx" // ::get
-#include "warnings.hxx" // warn
-#include "political.hxx" // ::init_political_colors
-#include "window.hxx" // ::display3D, ::init, ::finalize
+#include "warnings.hxx" // warn, error
+#include "political.hxx" // ::init_political_colors, ::update_political_colors
+#include "window.hxx" // ::init, ::display3D, ::finalize
 
 namespace impera {
 
@@ -31,12 +32,20 @@ namespace impera {
       std::fflush(stdout);
       for (int ih = 0; ih < height; ++ih) {
           std::printf("~~~~"); // mark the beginning of an ASCII pixel row
+          auto prev_color_code = color::colorcode(0.f, 0.f, 0.f); // black
           for (int iw = 0; iw < width; ++iw) {
               auto const rgb = population_map(ih, iw);
               auto const red   = rgb[0];
               auto const green = rgb[1];
               auto const blue  = rgb[2];
-              std::printf("%s ", color::colorchar(red, green, blue).c_str());
+//            std::printf("%s ", color::colorchar(red, green, blue).c_str()); // this prints a lot of formatting characters
+              auto const new_color_code = color::colorcode(red, green, blue);
+              if (new_color_code == prev_color_code) {
+                  std::printf(" "); // color was already set correctly
+              } else {
+                  std::printf("%s ", color::colorchar(new_color_code).c_str()); // this prints formatting characters when needed
+                  prev_color_code = new_color_code;
+              }
           } // iw
           std::printf("%s~~~~\n", color::def); // mark the beginning of an ASCII pixel row
       } // ih
@@ -125,7 +134,7 @@ namespace impera {
 
 
 
-  template <typename real_t, int Nspecies=3>
+  template <typename real_t, int Nspecies>
   class Impera_t {
   private:
       int RenderTime, BitMapTime, PoliticalMapTime, DisplayTime, DisplayPopTime, DisplayPerformance;
@@ -797,13 +806,13 @@ namespace impera {
 
 
 
-  template <int NSpecies>
+  template <typename real_t, int NSpecies>
   void* _run_some_days(int const ndays=1, int const echo=0) {
-      static Impera_t<double,NSpecies> *simulation = nullptr;
+      static Impera_t<real_t,NSpecies> *simulation = nullptr;
       static uint64_t iday = 0;
       if (nullptr == simulation) {
           iday = 0; // on first call
-          simulation = new Impera_t<double,NSpecies>(echo, 0);
+          simulation = new Impera_t<real_t,NSpecies>(echo, 0);
           return static_cast<void*>(simulation);
       } else {
           if (ndays < 0) {
@@ -816,35 +825,58 @@ namespace impera {
           }
           return nullptr;
       }
-  } // run_some_days
+  } // _run_some_days
 
-  void* run_some_days(int const Nspecies, int const ndays, int const echo) {
+  void* run_some_days(int const Nspecies, int const ndays, int const echo, int const fp_bits) {
+      bool const dp = (64 == fp_bits);
       switch (Nspecies) {
-          case  9:  return _run_some_days<9>(ndays, echo);
-          case  6:  return _run_some_days<6>(ndays, echo);
-          case  3:  return _run_some_days<3>(ndays, echo);
-          default:  warn("Requested Nspecies= %d but only {3, 6, 9} instanciated", Nspecies);
-                    return nullptr;
+#define   INSTANCE(NSPECIES) case NSPECIES: return dp ? _run_some_days<double,NSPECIES>(ndays, echo) \
+                                                      : _run_some_days<float ,NSPECIES>(ndays, echo);
+          INSTANCE(1)
+          INSTANCE(2)
+          INSTANCE(3)
+          INSTANCE(6)
+          INSTANCE(9)
+#undef    INSTANCE
+          default: error("Requested +Nspecies= %d but only {1, 2, 3, 6, 9} instanciated", Nspecies);
       } // switch Nspecies
+      return nullptr;
   } // run_some_days
 
 
-  template <typename real_t, int Nspecies=3>
+  template <typename real_t, int NSpecies=3>
   status_t start(int const echo=1, int const run=1) {
-      Impera_t<real_t, Nspecies> simulation(echo, run);
+      Impera_t<real_t,NSpecies> simulation(echo, run);
       return 0;
   } // start
 
   status_t test_start(int const echo) {
-      bool const dp = ('d' == (*control::get("real_t", "double") | 32));
+      bool const dp = ('d' == (*control::get("real_t", "double") | 32)); // true:double precision
       int const Nspecies = control::get("Nspecies", 3.);
-      switch (Nspecies) {
-          case 32:  return dp ? start<double,32>(echo) : start<float,32>(echo);
-//        case 12:  return dp ? start<double,12>(echo) : start<float,12>(echo);
-//        case  9:  return dp ? start<double, 9>(echo) : start<float, 9>(echo);
-//        case  6:  return dp ? start<double, 6>(echo) : start<float, 6>(echo);
-          default:  return dp ? start<double, 3>(echo) : start<float, 3>(echo);
-      } // switch Nspecies
+      if (Nspecies < 1) error("needs at least one species, found +Nspecies=%d", Nspecies);
+      int const run = control::get("run", 1.);
+      std::vector<unsigned> active;
+      {
+#define   INSTANCE(NSPECIES) { active.push_back(NSPECIES); \
+              if ( NSPECIES == Nspecies ) return dp ? start<double,NSPECIES>(echo, run) \
+                                                    : start<float ,NSPECIES>(echo, run); }
+          INSTANCE(1)
+          INSTANCE(2)
+          INSTANCE(3)
+          INSTANCE(6)
+          INSTANCE(9)
+          INSTANCE(12)
+//        INSTANCE(32)
+#undef    INSTANCE
+      }
+      std::printf("# Error, +Nspecies=%d is not in the list of active instances."
+                  "\n# Please add INSTANCE(%d) around %s:%d\n"
+                  "# Active instances are ", Nspecies, Nspecies, __FILE__, __LINE__ - 7);
+      for (int i = 0; i < active.size(); ++i) {
+            std::printf("%s%d", i?", ":"{", active[i]);
+      } // i
+      std::printf("}.\n");
+      return -1; // test failed
   } // test_start
 
   status_t all_tests(int const echo) {

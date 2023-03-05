@@ -1,19 +1,18 @@
-#include <cstdio> // std::printf
+#include <cstdio> // std::printf, ::snprintf
 #include <cassert> // assert
 #include <cstdlib> // std::exit
-#include <algorithm> // std::min
-#include <cmath> // M_PI
+#include <vector> // std::vector<T>
+#include <algorithm> // std::min, ::max
+#include <cmath> // M_PI, std::cos, ::sin, ::abs, ::pow, ::sqrt
 
 #include "window.hxx"
 
-#include "data_view.hxx" // view4D<T>
-#include "inline_tools.hxx" // set, add_product, intpow
+#include "data_view.hxx" // view3D<T>, view4D<T>
 #include "status.hxx" // status_t
-#include "icogrid.hxx" // ::n_ico_vertices
-#include "icomap.hxx" // ::GridCell_t
+#include "icogrid.hxx" // ::n_ico_vertices, ::rhomb_edge, ::generate, ::ico_index_wrap
+#include "icomap.hxx" // GridCell_t
 #include "control.hxx"  // ::get
-#include "impera.hxx" // ::read_resource_file, ::run_one_day
-// #include "impera.hxx" // ::Impera_t<real_t,Nspecies>
+#include "impera.hxx" // ::read_resource_file, ::run_some_days, ::MemoryCleanup
 
 #ifdef HAS_WINDOW
 // c++ -std=c++11 ... -framework GLUT -framework OpenGL -D GL_SILENCE_DEPRECATION
@@ -53,6 +52,7 @@ namespace window {
   static bool confirmquit = false;
   static bool simulation_is_running = false;
   static int simulation_speed = 1; // days per call to run_some_days
+  static int simulation_fp_bits = 64; // can be modified to 32 by +real_t=float
   int constexpr MaxSpeed = 512;
   static int echo = 0;
   static int16_t itheta_now = 9, iphi_now = 9; // range of int16_t is [-32768, 32767]
@@ -221,7 +221,7 @@ namespace window {
       vertex  = view4D<float>();
       colors  = view3D<float>();
       if (echo > 0) std::printf("# cleanup memory of simulation instance.\n");
-      simulation = impera::run_some_days(Nspecies, impera::MemoryCleanup, echo);
+      simulation = impera::run_some_days(Nspecies, impera::MemoryCleanup, echo, simulation_fp_bits);
       return 0;
   } // finalize
 
@@ -361,7 +361,7 @@ namespace window {
               if (simulation) {
                   if (simulation_is_running) {
                       simulation_is_running = false; // pause
-                      if (echo > 1) std::printf("# Simulation paused, hit spacebar to continue! (window needs to be in focus)\n");
+                      if (echo > 1) std::printf("# Simulation paused, hit spacebar to continue! (window needs to be in focus), \'q\' to quit.\n");
                   } else {
                       simulation_is_running = true; // continue
                   }
@@ -418,18 +418,6 @@ namespace window {
 
   void key_release(int const key, int const x, int const y) {}
 
-//   void points_to_go(); // forward declaration
-//
-//   void timer(int const value) {
-//       std::printf("# timer(value=%d) was called\n", value);
-//       glutPostRedisplay(); // redraw
-//       points_to_go();
-//   } // timer
-//
-//   void points_to_go() {
-//       glutTimerFunc(0, timer, 0);
-//   } // points_to_go
-
   void show_vertex(float const pos[4], float const rgb[3]=nullptr) {
       if (!rgb) {
           bool constexpr colorful_sphere = false;
@@ -447,17 +435,13 @@ namespace window {
 
   void continue_simulation(void) {
       if (simulation_is_running) {
-          impera::run_some_days(Nspecies, simulation_speed, echo);
-      }
+          impera::run_some_days(Nspecies, simulation_speed, echo, simulation_fp_bits);
+      } // is_running
   } // continue_simulation
 
   void display(void) {
 
       if (!initialized) return;
-
-//           float const red  [] = {1.f, 0.f, 0.f};
-//           float const green[] = {0.f, 1.f, 0.f}; // base colors
-//           float const blue [] = {0.f, 0.f, 1.f};
 
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Clear color and depth buffers
       glMatrixMode(GL_MODELVIEW);     // To operate on model-view matrix
@@ -626,6 +610,7 @@ namespace window {
   status_t inline test_world_map(int const echo_argument=1) {
       status_t stat(0);
       int const Level = control::get("Level", 5.); // icosahedral grid level
+      if (echo > 0) std::printf("# Simulation runs on an +Level=%d icosahedral grid map\n", Level);
       simulation_speed = std::min(std::max(1, int(control::get("Speed", 1.))), MaxSpeed);
       stat += create_wireframe(Level, echo);
       stat += get_resource_map(Level, echo);
@@ -634,9 +619,13 @@ namespace window {
       control::set("DisplayTime", "-1"); // do not display the population map in the terminal
       Nspecies = control::get("Nspecies", 3.);
       echo = echo_argument;
-      simulation = impera::run_some_days(Nspecies); // initialize the simulation internally
+      auto const real_t = control::get("real_t", "double");
+      simulation_fp_bits = ('d' == (*real_t | ('d' - 'D'))) ? 64 : 32;
+      if (echo > 0) std::printf("# Simulation uses fp%d precision due to +real_t=%s\n", simulation_fp_bits, real_t);
+      if (echo > 0) std::printf("# Simulation has +Nspecies=%d distinct species\n", Nspecies);
+      simulation = impera::run_some_days(Nspecies, 1, echo, simulation_fp_bits); // initialize the simulation internally
       simulation_is_running = false; // pause
-      if (echo > 0) std::printf("# Simulation is pause, hit spacebar to start/stop.\n");
+      if (echo > 0) std::printf("# Simulation is paused, hit spacebar to start/stop, hit \'q\' twice to quit.\n");
       run();
       return stat;
   } // test_world_map

@@ -32,28 +32,31 @@ namespace political {
       return check_political_colors(pcs, Nspecies);
   } // init_political_colors
 
-  inline double update_political_colors(float pcs[], unsigned const Nspecies
+  inline double update_political_colors(float pcs[]
+            , unsigned const Nspecies // number of different colors
             , double const overlap[] // assumed matrix shape [Nspecies][Nspecies], only off-diagonal elements are relevant
             , unsigned const Nsteps=99) {
       view2D<float> force(Nspecies, 4);
       float constexpr dt = 1e-3;
       float constexpr bw = 1e2; // control here how strong the force is that keeps the color saturation high
       float largest_displacement{1}, largest_force;
+      std::vector<float> old_pcs(Nspecies*4);
+      set(old_pcs.data(), Nspecies*4, pcs); // deep copy
       unsigned step;
       for (step = 0; (step < Nsteps) && (largest_displacement > 2e-6); ++step) {
 
           // force maximing the color saturation
           for (int is = 0; is < Nspecies; ++is) {
-              float const posi[] = {pcs[is*4], pcs[is*4 + 1], pcs[is*4 + 2]};
+              float const posi[] = {pcs[is*4 + 0], pcs[is*4 + 1], pcs[is*4 + 2]};
               auto const bw_force = bw*(1 - (posi[0] + posi[1] + posi[2])); // 1:slightly darker than grey
               set(force[is], 4, bw_force); // init force
           } // is
 
           // repulsive pair forces
           for (int is = 0; is < Nspecies; ++is) {
-              float const posi[] = {pcs[is*4], pcs[is*4 + 1], pcs[is*4 + 2]};
+              float const posi[] = {pcs[is*4 + 0], pcs[is*4 + 1], pcs[is*4 + 2]};
               for (int js = 0; js < is; ++js) { // compare to all previous
-                  float const posj[] = {pcs[js*4], pcs[js*4 + 1], pcs[js*4 + 2]};
+                  float const posj[] = {pcs[js*4 + 0], pcs[js*4 + 1], pcs[js*4 + 2]};
                   float const diff[] = {posj[0] - posi[0], posj[1] - posi[1], posj[2] - posi[2]};
                   float const dist2 = pow2(diff[0]) + pow2(diff[1]) + pow2(diff[2]) + 0.01; // 0.01: some safety
                   float const ovl = (Nspecies > 6) ? overlap[is*Nspecies + js] : 0;
@@ -78,16 +81,20 @@ namespace political {
               } // rgb
           } // is
 
-          // this algorithm for Nspecies=3 converges to pure RGB, for Nspecies=6, magenta,cyan and yellow are added
-          // so the color find themselfs in the 6 vertices of the RGB cube with are neither black (000) nor white (111)
-          // for more than 6 species, we add the overlap to the repulsive force
+          // This algorithm for Nspecies=3 converges to pure RGB, for Nspecies=6, magenta, cyan and yellow are added
+          // so the colors find themselfs in the 6 vertices of the RGB cube with are neither black (0,0,0) nor white (1,1,1).
+          // For more than 6 species, we add the overlap as a repulsive force.
+
           // printf("# in step #%i, largest force is %g and largest displacement is %g\n", step, largest_force, largest_displacement);
+
       } // step
       printf("# after %d steps, largest force is %g and largest displacement is %g\n", step, largest_force, largest_displacement);
 
       for (int is = 0; is < Nspecies; ++is) {
-          auto const cc = color::colorchar(&pcs[is*4]);
-          printf("# relaxed political color for species%3i %s       %s\n", is, &cc, color::def);
+          auto const oldc = color::colorchar(&old_pcs[is*4]);
+          auto const newc = color::colorchar(&pcs[is*4]);
+          printf("# relaxed political color %s       %s->%s       %s for species #%i\n",
+                                              &oldc, color::def, &newc, color::def, is);
       } // is
 
       return check_political_colors(pcs, Nspecies);

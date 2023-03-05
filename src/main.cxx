@@ -62,11 +62,11 @@ namespace main_tools {
                   if (show) printf("#    module= %s\n", result.first);
                   else      printf("#    module= %-24s status= %i\n", result.first, int(stat));
               } // echo
-              status += std::abs(int(stat));
+              status += (0 != stat);
           } // result
           if (echo > 0) {
               if (!show) printf("\n#%3ld modules have been tested,  total status= %d\n\n", results.size(), int(status));
-              if (status > 0) printf("# Warning! At least one module test failed!\n");
+              if (status > 0) warn("%d module test%s failed!", status, (status - 1)?"s":"");
           } // echo
       } // something has been tested
       return status;

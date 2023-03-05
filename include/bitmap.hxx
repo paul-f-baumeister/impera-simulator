@@ -9,7 +9,7 @@
 namespace bitmap {
 
   inline void transfer4Byte(unsigned char target[4], unsigned int const source) {
-      for(int i = 0; i < 4; ++i) {
+      for (int i = 0; i < 4; ++i) {
           target[i] = (unsigned char)(source >> (8*i));
       } // i
   } // transfer4Byte
