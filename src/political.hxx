@@ -22,7 +22,7 @@ namespace political {
       } // is
       return min_dist2;
   } // check_political_colors
-  
+
   inline double init_political_colors(float pcs[], unsigned const Nspecies) {
       for (int is = 0; is < Nspecies; ++is) {
           for (int rgb = 0; rgb < 3; ++rgb) {
@@ -41,7 +41,7 @@ namespace political {
       float largest_displacement{1}, largest_force;
       unsigned step;
       for (step = 0; (step < Nsteps) && (largest_displacement > 2e-6); ++step) {
-        
+
           // force maximing the color saturation
           for (int is = 0; is < Nspecies; ++is) {
               float const posi[] = {pcs[is*4], pcs[is*4 + 1], pcs[is*4 + 2]};
@@ -66,7 +66,7 @@ namespace political {
 
           largest_force = 0;
           largest_displacement = 0;
-          
+
           // relax
           for (int is = 0; is < Nspecies; ++is) {
               for (int rgb = 0; rgb < 3; ++rgb) {
@@ -77,7 +77,7 @@ namespace political {
                   largest_displacement = std::max(largest_displacement, std::abs(pcs[is*4 + rgb] - oldpos));
               } // rgb
           } // is
-          
+
           // this algorithm for Nspecies=3 converges to pure RGB, for Nspecies=6, magenta,cyan and yellow are added
           // so the color find themselfs in the 6 vertices of the RGB cube with are neither black (000) nor white (111)
           // for more than 6 species, we add the overlap to the repulsive force
@@ -89,10 +89,10 @@ namespace political {
           auto const cc = color::colorchar(&pcs[is*4]);
           printf("# relaxed political color for species%3i %s       %s\n", is, &cc, color::def);
       } // is
-      
+
       return check_political_colors(pcs, Nspecies);
   } // update_political_colors
-  
+
   inline int all_tests(int const echo=1) { return -1; }
 
 } // namespace political
