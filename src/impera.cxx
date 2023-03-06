@@ -13,7 +13,8 @@
 #endif // _OPENMP
 #include "mpi_replacements.hxx" // MPI_Wtime, ...
 
-#include "icomap.hxx" // GridCell_t, ::create_world_map, ::map_height, ::map_width, ::n_ico_vertices
+#include "icogrid.hxx" // ::n_ico_vertices
+#include "icomap.hxx" // GridCell_t, ::create_world_map, ::map_height, ::map_width
 #include "config.hxx" // constants ...
 #include "bitmap.hxx" // ::write_bmp_file
 #include "color.hxx" // ::def, ::colorchar, ::string15_t, ::colorcode
@@ -194,7 +195,7 @@ namespace impera {
             int const VerifyResourceMap = control::get("VerifyResourceMap", 1.);
             if (echo > 0) std::printf("# VerifyResourceMap=%d\n", VerifyResourceMap);
             if (VerifyResourceMap) {
-                assert(nregions == icomap::n_ico_vertices(Level));
+                assert(nregions == icogrid::n_ico_vertices(Level));
                 int const h = icomap::map_height(Level),
                           w = icomap::map_width(Level);
                 view2D<float> resource_ico(nregions, 4, 0.f); // [blue,green,red,padding]
@@ -632,7 +633,7 @@ namespace impera {
         } // display_screen
 
         if (render_window) {
-            if (icomap::n_ico_vertices(Level) == Nregions) {
+            if (icogrid::n_ico_vertices(Level) == Nregions) {
 //              std::printf("# window::display3D(Level, pop_ico.data());\n"); // DEBUG
                 window::display3D(Level, pop_ico.data());
             } else warn("Rendering only supported for icosahedral grids");

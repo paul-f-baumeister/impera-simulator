@@ -7,6 +7,7 @@
 #include "data_view.hxx" // view2D<T>, view3D<T>
 #include "inline_tools.hxx" // set, add_product
 #include "status.hxx" // status_t
+#include "icogrid.hxx" // ::rhomb_edge, ::ico_index, ::n_ico_vertices
 
   typedef struct {
       uint32_t neighbors[6];
@@ -17,25 +18,10 @@
 namespace icomap {
 
   inline constexpr
-  size_t rhomb_edge(unsigned const Level) { return (1ul << Level); }
-  
-  inline constexpr
-  size_t map_width(unsigned const Level) { return 10*rhomb_edge(Level); }
+  size_t map_width(unsigned const Level) { return 10*icogrid::rhomb_edge(Level); }
   
   inline constexpr 
-  size_t map_height(unsigned const Level) { return 3*rhomb_edge(Level) + 1; }
-
-  inline constexpr
-  size_t ico_index(unsigned const Level, unsigned const i10, int const iSE, int const iNE) { 
-      return iNE + rhomb_edge(Level)*(iSE + rhomb_edge(Level)*i10); }
-
-  inline constexpr
-  size_t n_ico_vertices(unsigned const Level) { return ico_index(Level, 10, 0, 2); } // 2 because we add NorthPole and SouthPole
-
-  inline constexpr
-  size_t pole_ico_index(unsigned const Level, char const sn) { // SouthPole: pole_ico_index(L,'S');
-      return ico_index(Level, 10, 0, ('n' == (sn | 32))); }      // NorthPole: pole_ico_index(L,'N');
-
+  size_t map_height(unsigned const Level) { return 3*icogrid::rhomb_edge(Level) + 1; }
 
   template <typename real_t, typename real_in_t>
   status_t create_world_map(
@@ -48,7 +34,7 @@ namespace icomap {
   ) {
       // this map mimiques a Mollweide map
       size_t const Width = map_width(Level);
-      size_t const tL = rhomb_edge(Level);
+      size_t const tL = icogrid::rhomb_edge(Level);
 
       size_t const stride = std::min(dat.stride(), map.stride());
 
@@ -58,19 +44,19 @@ namespace icomap {
       
       for (int i10 = 0; i10 < 10; ++i10) { // rhombs
           int const i01 = i10 & 0x1; // == i10 % 2; // 0: northern rhomb, 1: southern rhomb
-// #ifdef MOLLWEIDE
+// #ifdef    MOLLWEIDE
 //        int const im5 = (i10 - i01 + 5) % 10 - 5;
-// #endif
+// #endif // MOLLWEIDE
           for (int iSE = 0; iSE < tL; ++iSE) { // south east direction
               for (int iNE = 0; iNE < tL; ++iNE) { // north east direction
-                  auto const idx = ico_index(Level, i10, iSE, iNE);
+                  auto const idx = icogrid::ico_index(Level, i10, iSE, iNE);
                   int const iS = (i01 + 1)*tL + iSE - iNE,
                             iE = (i10 + 4)*tL + iSE + iNE; // the +4 takes care of the Europe-centered map with Greenwich in the very center
                             // or (if the map is shifted by -4 degrees) Madrid is right in the middle
-// #ifdef MOLLWEIDE
-//                   int const ipolar = (iSE - iNE)*(1 - 2*i01);
-//                   if (ipolar < 0) { iE += im5*ipolar; }
-// #endif
+// #ifdef    MOLLWEIDE
+//                int const ipolar = (iSE - iNE)*(1 - 2*i01);
+//                if (ipolar < 0) { iE += im5*ipolar; }
+// #endif // MOLLWEIDE
                   if (icosahedral || (((0 == i01) && (iSE > iNE)) || ((1 == i01) && (iSE < iNE)))) {
                       // determine 2 pixel per vertex to mimique the hex pattern, need to elongate 
                       // the picture by sqrt(3) in the y-direction to get an undistorted hex-map
@@ -122,8 +108,8 @@ namespace icomap {
                       } // i01
 
                       // from here the same as in the block above
-                      auto const idx0 = ico_index(Level, i10, iSE0, iNE0),
-                                 idx1 = ico_index(Level, i10, iSE1, iNE1);
+                      auto const idx0 = icogrid::ico_index(Level, i10, iSE0, iNE0),
+                                 idx1 = icogrid::ico_index(Level, i10, iSE1, iNE1);
                       int const iEast = (iE + (i10 + 4)*tL) % Width;
                       set(map(iS,iEast), stride, dat[idx0], f*w0);
                       if (w1 > 0) add_product(map(iS,iEast), stride, dat[idx1], f*w1);
@@ -139,9 +125,10 @@ namespace icomap {
   
   status_t inline test_create_world_map(int const echo=1, int const Level=3) {
       status_t stat(0);
-      view2D<char> input(n_ico_vertices(Level), 1, '@');
-      for (size_t i = 0; i < n_ico_vertices(Level); ++i) {
-          input(i,0) = 'a' + (i & 15);
+      size_t const nv = icogrid::n_ico_vertices(Level);
+      view2D<char> input(nv, 1, '@');
+      for (size_t i = 0; i < nv; ++i) {
+          input(i,0) = 'a' + (i & 15); // i % 16 --> letters 'abcdefghijklmnop'
       } // i
       view3D<float> output(map_height(Level), map_width(Level), 1);
       stat += create_world_map(output, input, Level, float(' '), 1.f, false);
@@ -157,7 +144,7 @@ namespace icomap {
 
       std::printf("\n# Rectangular map %d x %d for Level %i\n", map_height(Level), map_width(Level), Level);
       view3D<float> square(map_height(Level), map_width(Level), 1);
-      stat += create_world_map(square, input, Level, 0.f);
+      stat += create_world_map(square, input, Level, 0.f, 1.f, true);
       for (int south = 0; south < map_height(Level); ++south) {
           std::printf("# ");
           for (int east = 0; east < map_width(Level); ++east) {
