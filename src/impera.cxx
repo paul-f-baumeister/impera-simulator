@@ -699,14 +699,14 @@ namespace impera {
         // now pick Nspecies + 1 different colors to color the map (last color for unexplored terrain);
         // these RGB vector can move in the color cube but forbidden are white and black by repulsion
         // and also there is a stronger repulsion of two species that have an overlap.
-        view2D<float> pop_ico(Nregions, 4, 0.f);
+        view2D<float> pol_ico(Nregions, 3, 0.f);
         for (size_t ir = 0; ir < Nregions; ++ir) {
             int const iss = strongest_species[ir];
-            set(pop_ico[ir], 3, political_colors[iss]);
+            set(pol_ico[ir], 3, political_colors[iss]);
         } // ir
         int const h = icomap::map_height(Level), w = icomap::map_width(Level);
         view3D<float> pol_map(h, w, 4, 0.f);
-        stat += icomap::create_world_map(pol_map, pop_ico, Level, 1.f);
+        stat += icomap::create_world_map(pol_map, pol_ico, Level, 1.f);
 
         char bitmapfile[512];
         std::snprintf(bitmapfile, 512, "%s/political-L%i.%06li", PicturePath, Level, it/PoliticalMapTime);
@@ -715,6 +715,10 @@ namespace impera {
         if (DisplayPolitical > 0) {
             display_in_terminal(pol_map, h, w);
         } // DisplayPolitical
+
+        // if (render_window) {
+        //     window::display3D(Level, pol_ico.data()); // shows the political map on the 3D sphere
+        // } // render in OpenGL window
 
     } // export_political
 
@@ -798,9 +802,11 @@ namespace impera {
   private:
 
     inline int color_mapping(int const is) { return is % 3; }
+
     inline color::string15_t species_color(int const is) {
         auto const cm = color_mapping(is);
-        return color::colorchar(0 == cm, 1 == cm, 2 == cm); }
+        return color::colorchar(0 == cm, 1 == cm, 2 == cm);
+    } // species_color
 
   }; // class Impera_t
 
