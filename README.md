@@ -1,6 +1,9 @@
 # impera-simulator
 A simulator for populations living and sharing resources on a (spherical) map
 
+![Screenshot on Level5 resolution with 9 species](doc/pics/L5with9species.png)
+![Screenshot on Level5 resolution with 9 species coexisting](doc/pics/L5with9species_mixes2white.png)
+
 # optional dependencies
  - OpenGL for the GUI
 
