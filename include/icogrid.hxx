@@ -2,7 +2,6 @@
 
 #include <cstdio> // std::printf, ::fopen, ::fprintf, ::fclose
 #include <cassert> // assert
-// #include <algorithm> // std::min
 #include <cmath> // std::cos, ::sin, M_PI, ::sqrt
 #include <ctime> // std::time, ::time_t, ::put_time
 #include <iomanip> // std::put_time
@@ -26,7 +25,8 @@ namespace icogrid {
       v[0] = factor*std::cos(angle);
       v[1] = factor*std::sin(angle);
       v[2] = factor*(0.5 - (i10 & 0x1)); // i & 0x1 is eqivalent to (i + 2)%2
-      /*
+      /* BasePoints
+       *
        *    N   N   N   N   NorthPole
        *   / \ / \ / \ / \ / \
        *  0 - 2 - 4 - 6 - 8 - 0
@@ -57,26 +57,40 @@ namespace icogrid {
 
 
   inline size_t ico_index_wrap(unsigned const Level, unsigned const i10, unsigned const iSE, unsigned const iNE) {
+      // Given we add 1 to the iSE or the iNE index of a grid point. Then we need to invoke this wrap function to
+      // correct for the boundaries in case the point has left the rhomb.
+ 
       // std::printf("# ico_index_wrap(Level=%d, i10=%d, iSE=%d, iNE=%d)\n", Level, i10, iSE, iNE);
       int const tL = rhomb_edge(Level);
-      int j10 = i10, jSE = iSE, jNE = iNE;
+      /* RhombIndex (i10)
+       *
+       *    N   N   N   N   NorthPole
+       *   / \ / \ / \ / \ / \
+       *  x 0 x 2 x 4 x 6 x 8 x
+       *   \ / \ / \ / \ / \ / \
+       *    x 1 x 3 x 5 x 7 x 9 x
+       *     \ / \ / \ / \ / \ /
+       *      S   S   S   S   SouthPole
+       */
+      int j10, jSE, jNE;
       if (i10 & 0x1) {
-          // southern rhomb
+          // i10 is odd, southern rhomb
           if (iSE == tL) {
-              if (0 == iNE) return pole_ico_index(Level, 'S'); // south pole
+              if (0 == iNE) return pole_ico_index(Level, 'S'); // south pole, i10=10, iSE=0, iNE=1
               // leave a southern rhomb to the east
               j10 = (i10 + 2) % 10; // hit another southern rhomb
-              jNE = iSE - tL;
+              jNE = iSE - tL; // which is 0
               jSE = tL - iNE;
           } else if (iNE == tL) {
               // leave a southern rhomb to the north east
               j10 = (i10 + 1) % 10; // hit a northern rhomb
               jNE = iNE - tL;
+              jSE = iSE;
           }
       } else {
-          // northern rhomb
+          // i10 is even, northern rhomb
           if (iNE == tL) {
-              if (0 == iSE) return pole_ico_index(Level, 'N'); // north pole
+              if (0 == iSE) return pole_ico_index(Level, 'N'); // north pole, i10=10, iSE=0, iNE=0
               // leave a northern rhomb to the east
               j10 = (i10 + 2) % 10; // hit another northern rhomb
               jNE = tL - iSE;
@@ -85,13 +99,14 @@ namespace icogrid {
               // leave a northern rhomb the the south east
               j10 = (i10 + 1) % 10; // hit a southern rhomb
               jSE = iSE - tL;
+              jNE = iNE;
           }
       }
       // std::printf("# ico_index_wrap(Level=%d, i10=%d, iSE=%d, iNE=%d) --> (%d, %d, %d)\n", Level, i10, iSE, iNE, j10, jSE, jNE);
       assert(0 <= j10); assert(j10 < 10);
       assert(0 <= jSE); assert(jSE < tL);
       assert(0 <= jNE); assert(jNE < tL);
-      return (j10*tL + jSE)*tL + jNE;
+      return (j10*tL + jSE)*tL + jNE; // == ico_index(j10, jSE, jNE);
   } // ico_index_wrap
 
   inline double norm2(double const x, double const y, double const z) { return pow2(x) + pow2(y) + pow2(z); }
@@ -172,6 +187,10 @@ namespace icogrid {
 
   inline int32_t global_coordinates(unsigned Level, unsigned i10, unsigned iSE, unsigned iNE) {
       assert(Level < 15); // 10*4^15 > 2^32
+      // Level=14 --> 5,368,709,120 triangles, resolution ~308m
+      // 2^32 ~= 4.3G --> uint32_t can index all 2,684,354,560 vertices
+      //                  using int32_t, some indices will be negative!
+
 //       int32_t constexpr id_north_pole = (0xa << 28);
 //       int32_t constexpr id_south_pole = (0xa << 28) | 0x1;
       int32_t id = (i10 % 10) << 28;
@@ -204,8 +223,8 @@ namespace icogrid {
   status_t find_rhomb(double const xyz[3], view4D<real_t> const & vtx) {
       double const n2 = norm2(xyz);
       if (n2 < .5) return -1; // not even close to the unit sphere
-      double const normalizer = 1./std::sqrt(n2);
-      double const v[3] = {xyz[0]*normalizer, xyz[1]*normalizer, xyz[2]*normalizer};
+      double const f = 1./std::sqrt(n2); // normalization factor
+      double const v[3] = {xyz[0]*f, xyz[1]*f, xyz[2]*f};
       // now v is on the unit sphere
       double const lat = std::asin(v[2]), lon = std::atan2(v[1], v[0]);
       return find_rhomb(lat, lon, vtx);
@@ -660,14 +679,14 @@ namespace icogrid {
 
 
       if (0) { // scope: eval
-          if (echo > 0) printf("\n# %s: Histogramm of multiplicity 60 levels: (up to Level %d):\n", __func__, Level);
+          if (echo > 0) printf("\n# %s: Histogramm of multiplicity 60 levels: (up to +Level=%d):\n", __func__, Level);
           for(size_t m = 0; m < hm60.size(); ++m) {
               if (hm60[m] > 0 && echo > 0) printf("# %d %d\n", m, hm60[m]); // we find hm60[L] == 2^{L - 1}
           } // m
       } // scope
 
       { // scope: eval
-          if (echo > 0) printf("\n# %s: Histogramm of multiplicities (Level %d):\n", __func__, Level);
+          if (echo > 0) printf("\n# %s: Histogramm of multiplicities (+Level=%d):\n", __func__, Level);
           size_t sum{0}, msum{0};
           for(size_t m = 0; m < hist.size(); ++m) {
               sum += hist[m];

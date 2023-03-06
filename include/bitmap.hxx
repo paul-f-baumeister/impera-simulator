@@ -17,7 +17,8 @@ namespace bitmap {
   template <typename real_t>
   status_t write_bmp_file(char const *basename
       , real_t const data // data layout [h][stride >= w][4]
-      , unsigned const h, unsigned const w // height and width
+      , unsigned const h // height
+      , unsigned const w // width
       , int const stride=-1 // -1:take w as stride
       , float const factor=255
       , char const *extension=".bmp"

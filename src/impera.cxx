@@ -644,34 +644,30 @@ namespace impera {
     bool const export_political = ((PoliticalMapTime > 0) && (0 == (it % PoliticalMapTime)));
     if (export_political) {
         // construct an overlap matrix measuring if two species are next to each other or living on the same lands
-        view2D<double> ovl(Nspecies, Nspecies, 0.0);
-        for (size_t ir = 0; ir < Nregions; ++ir) {
-            for (int is = 0; is < Nspecies; ++is) {
-                double const pop_is_ir = pop(is,ir);
-                for (int js = 0; js < Nspecies; ++js) {
-                    ovl(is,js) += pop_is_ir*pop(js,ir);
-                } // js
-            } // is
-        } // ir
-
-        std::vector<double> factor(Nspecies, 1.0);
+        view2D<double> ovl(Nspecies, Nspecies, 0.);
+        std::vector<double> factor(Nspecies, 1.);
         for (int is = 0; is < Nspecies; ++is) {
+            for (int js = 0; js <= is; ++js) {
+                ovl(is,js) = dot_product(Nregions, pop[is], pop[js]);
+            } // js
             factor[is] = 1./std::sqrt(ovl(is,is));
         } // is
 
         // renormalize to have unity on the diagonal
         for (int is = 0; is < Nspecies; ++is) {
-            for (int js = 0; js < Nspecies; ++js) {
-                ovl(is,js) *= factor[is]*factor[js];
-            } // js
+            scale(ovl[is], Nspecies, factor.data(), factor[is]);
         } // is
 
         if (1) {
-            std::printf("# year %.2f overlap (*10):\n", it*per_year);
+            std::printf("# year %.2f overlap (in %%):\n#   ", it*per_year);
+            for (int js = 0; js < Nspecies; ++js) {
+                std::printf("%6i", js);
+            } // js
+            std::printf("\n");
             for (int is = 1; is < Nspecies; ++is) {
                 std::printf("#%3i  ", is);
                 for (int js = 0; js < is; ++js) {
-                    std::printf("%6.3f", 10*ovl(is,js)); // show only off-diagonal elements, matrix is symmetric and has 1s on the diagonal
+                    std::printf("%6.2f", 100*ovl(is,js)); // show only off-diagonal elements, matrix is symmetric and has 1s on the diagonal
                 } // js
                 std::printf("\n");
             } // is

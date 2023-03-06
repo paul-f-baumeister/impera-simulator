@@ -26,7 +26,7 @@ namespace political {
   inline double init_political_colors(float pcs[], unsigned const Nspecies) {
       for (int is = 0; is < Nspecies; ++is) {
           for (int rgb = 0; rgb < 3; ++rgb) {
-              pcs[is*4 + rgb] = .875f*(rgb == (is % 3)) + .124f*std::sin(is) + .01f*std::cos(is); // init
+              pcs[is*4 + rgb] = 0.125f + .75f*(rgb == (is % 3)) + .124f*std::sin(is) + .01f*std::cos(is); // init
           } // rgb
       } // is
       return check_political_colors(pcs, Nspecies);
@@ -34,7 +34,7 @@ namespace political {
 
   inline double update_political_colors(float pcs[]
             , unsigned const Nspecies // number of different colors
-            , double const overlap[] // assumed matrix shape [Nspecies][Nspecies], only off-diagonal elements are relevant
+            , double const overlap[] // assumed matrix shape [Nspecies][Nspecies], only off-diagonal elements below the diagonal are relevant
             , unsigned const Nsteps=99) {
       view2D<float> force(Nspecies, 4);
       float constexpr dt = 1e-3;
@@ -60,7 +60,7 @@ namespace political {
                   float const diff[] = {posj[0] - posi[0], posj[1] - posi[1], posj[2] - posi[2]};
                   float const dist2 = pow2(diff[0]) + pow2(diff[1]) + pow2(diff[2]) + 0.01; // 0.01: some safety
                   float const ovl = (Nspecies > 6) ? overlap[is*Nspecies + js] : 0;
-                  float const extra_force = (ovl == ovl) ? ovl : 0;
+                  float const extra_force = (ovl == ovl) ? 10*ovl : 0; // check for NaN
                   float const factor = 1.f/pow2(dist2) + extra_force;
                   add_product(force[is], 3, diff, -factor);
                   add_product(force[js], 3, diff,  factor);
@@ -88,13 +88,27 @@ namespace political {
           // printf("# in step #%i, largest force is %g and largest displacement is %g\n", step, largest_force, largest_displacement);
 
       } // step
-      printf("# after %d steps, largest force is %g and largest displacement is %g\n", step, largest_force, largest_displacement);
+      printf("# %s: after %d steps, largest force is %g and largest displacement is %g\n",
+              __func__, step, largest_force, largest_displacement);
 
       for (int is = 0; is < Nspecies; ++is) {
-          auto const oldc = color::colorchar(&old_pcs[is*4]);
+          int diff{0};
+          uint8_t values[2][4]; // 0:old, 1:new
+          for (int rgb = 0; rgb < 3; ++rgb) {
+              values[0][rgb] = 255*old_pcs[is*4 + rgb];
+              values[1][rgb] = 255*    pcs[is*4 + rgb];
+              diff += (values[0][rgb] != values[1][rgb]);
+          } // rgb
           auto const newc = color::colorchar(&pcs[is*4]);
-          printf("# relaxed political color %s       %s->%s       %s for species #%i\n",
-                                              &oldc, color::def, &newc, color::def, is);
+          if (diff) {
+              auto const oldc = color::colorchar(&old_pcs[is*4]);
+              printf("# relax political color %s RGB(%3i,%3i,%3i) %s->%s RGB(%3i,%3i,%3i) %s for species #%i\n",
+                        &oldc, values[0][0], values[0][1], values[0][2], color::def,
+                        &newc, values[1][0], values[1][1], values[1][2], color::def, is);
+          } else {
+              printf("#       political color unchanged           %s RGB(%3i,%3i,%3i) %s for species #%i\n",
+                        &newc, values[1][0], values[1][1], values[1][2], color::def, is);
+          } // RGB color has changed
       } // is
 
       return check_political_colors(pcs, Nspecies);
